@@ -1,263 +1,218 @@
+"""
+pipeline.py — Core ML inference pipeline for the Django backend.
+
+Loads all model artifacts once at module import time (module-level globals).
+Single public entry-point: process_engine_data(sensor_data) → dict of z-scores.
+
+Path setup MUST stay before any ml_model imports; manage.py injects the project
+root into sys.path at startup, but Daphne loads this module without running
+manage.py, so we do the injection here.
+"""
+import logging
 import os
 import sys
+from typing import Dict
 
 # -------------------------------------------------
-# Resolve Project Root — must happen before ml_model imports
+# Project-root path injection (must precede ml_model imports)
 # -------------------------------------------------
 
-CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
-BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.dirname(CURRENT_DIR)))
-PROJECT_ROOT = os.path.dirname(BACKEND_DIR)
+_CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+_BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.dirname(_CURRENT_DIR)))
+_PROJECT_ROOT = os.path.dirname(_BACKEND_DIR)
 
-if PROJECT_ROOT not in sys.path:
-    sys.path.insert(0, PROJECT_ROOT)
+if _PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, _PROJECT_ROOT)
 
 import joblib as jb
 import numpy as np
 from tensorflow.keras.models import load_model
 
 from .kalman_service import apply_kalman
+from config.constants import (
+    AE_FEATURES,
+    AUTOENCODER_MODEL_FILES,
+    AUTOENCODER_PREPROCESSING_FILES,
+    AUTOENCODER_SUBPATH,
+    MAHAL_FUSION_WEIGHT,
+    SENSOR_COLS,
+    SVM_SUBPATH,
+    Z_SCORE_EPSILON,
+)
 from ml_model.models.mahalanobis.distance import MahalanobisDistance
 
-ML_MODEL_PATH = os.path.join(PROJECT_ROOT, "ml_model")
+logger = logging.getLogger(__name__)
 
-AUTOENCODER_PATH = os.path.join(
-    ML_MODEL_PATH,
-    "models",
-    "autoencoders",
-    "residual_score",
-    "encoded_model",
-)
-
-SVM_PATH = os.path.join(
-    ML_MODEL_PATH,
-    "models",
-    "svm",
-    "encoded",
-    "svm_model.joblib",
-)
+_ML_MODEL_PATH = os.path.join(_PROJECT_ROOT, "ml_model")
+_AUTOENCODER_PATH = os.path.join(_ML_MODEL_PATH, "models", AUTOENCODER_SUBPATH)
+_SVM_PATH = os.path.join(_ML_MODEL_PATH, "models", SVM_SUBPATH)
 
 # -------------------------------------------------
-# Globals
+# Module-level globals (populated by load_trained_models)
 # -------------------------------------------------
 
-MAHAL_MODEL = MahalanobisDistance()
+_MAHAL_MODEL = MahalanobisDistance()
 
-AUTOENCODER_BOOST = None
-AUTOENCODER_DPF = None
-AUTOENCODER_MAF = None
-AUTOENCODER_EXHAUST = None
+_AUTOENCODER_BOOST    = None
+_AUTOENCODER_DPF      = None
+_AUTOENCODER_MAF      = None
+_AUTOENCODER_EXHAUST  = None
 
-SCALAR_BOOST = None
-MU_BOOST = None
-STD_BOOST = None
-THRESHOLD_BOOST = None
+_SCALAR_BOOST    = None
+_THRESHOLD_BOOST = None
+_SCALAR_DPF      = None
+_THRESHOLD_DPF   = None
+_SCALAR_MAF      = None
+_THRESHOLD_MAF   = None
+_SCALAR_EXHAUST  = None
+_THRESHOLD_EXHAUST = None
 
-SCALAR_DPF = None
-MU_DPF = None
-STD_DPF = None
-THRESHOLD_DPF = None
-
-SCALAR_MAF = None
-MU_MAF = None
-STD_MAF = None
-THRESHOLD_MAF = None
-
-SCALAR_EXHAUST = None
-MU_EXHAUST = None
-STD_EXHAUST = None
-THRESHOLD_EXHAUST = None
-
-SVM_MODEL = None
+_SVM_MODEL = None
 
 
 # -------------------------------------------------
-# Load Models
+# Model loading
 # -------------------------------------------------
 
-def load_trained_models():
-    global AUTOENCODER_BOOST, AUTOENCODER_DPF
-    global AUTOENCODER_MAF, AUTOENCODER_EXHAUST
-    global SCALAR_BOOST, MU_BOOST, STD_BOOST
-    global SCALAR_DPF, MU_DPF, STD_DPF
-    global SCALAR_MAF, MU_MAF, STD_MAF
-    global SCALAR_EXHAUST, MU_EXHAUST, STD_EXHAUST
-    global THRESHOLD_BOOST, THRESHOLD_DPF, THRESHOLD_MAF, THRESHOLD_EXHAUST
-    global SVM_MODEL
+def load_trained_models() -> None:
+    """Load all model artifacts into module-level globals.
 
-    # -------- BOOST --------
-    AUTOENCODER_BOOST = load_model(
-        os.path.join(AUTOENCODER_PATH, "nn_model_boost.keras")
-    )
-    bundle = jb.load(os.path.join(AUTOENCODER_PATH, "nn_model_preprocessing_boost.pkl"))
-    SCALAR_BOOST = bundle["scaler"]
-    MU_BOOST = bundle["mean"]
-    STD_BOOST = bundle["std"]
-    THRESHOLD_BOOST = bundle["threshold"]
+    Called once at import time. Safe to call again; models will be reloaded.
+    """
+    global _AUTOENCODER_BOOST, _AUTOENCODER_DPF, _AUTOENCODER_MAF, _AUTOENCODER_EXHAUST
+    global _SCALAR_BOOST, _THRESHOLD_BOOST
+    global _SCALAR_DPF,   _THRESHOLD_DPF
+    global _SCALAR_MAF,   _THRESHOLD_MAF
+    global _SCALAR_EXHAUST, _THRESHOLD_EXHAUST
+    global _SVM_MODEL
 
-    # -------- DPF --------
-    AUTOENCODER_DPF = load_model(
-        os.path.join(AUTOENCODER_PATH, "nn_model_dpf.keras")
-    )
-    bundle = jb.load(os.path.join(AUTOENCODER_PATH, "nn_model_preprocessing_dpf.pkl"))
-    SCALAR_DPF = bundle["scaler"]
-    MU_DPF = bundle["mean"]
-    STD_DPF = bundle["std"]
-    THRESHOLD_DPF = bundle["threshold"]
+    for name, global_ae, global_scalar, global_thresh in [
+        ("boost",   "_AUTOENCODER_BOOST",   "_SCALAR_BOOST",   "_THRESHOLD_BOOST"),
+        ("dpf",     "_AUTOENCODER_DPF",     "_SCALAR_DPF",     "_THRESHOLD_DPF"),
+        ("maf",     "_AUTOENCODER_MAF",     "_SCALAR_MAF",     "_THRESHOLD_MAF"),
+        ("exhaust", "_AUTOENCODER_EXHAUST", "_SCALAR_EXHAUST", "_THRESHOLD_EXHAUST"),
+    ]:
+        model = load_model(os.path.join(_AUTOENCODER_PATH, AUTOENCODER_MODEL_FILES[name]))
+        bundle = jb.load(os.path.join(_AUTOENCODER_PATH, AUTOENCODER_PREPROCESSING_FILES[name]))
+        globals()[global_ae]      = model
+        globals()[global_scalar]  = bundle["scaler"]
+        globals()[global_thresh]  = bundle["threshold"]
 
-    # -------- MAF --------
-    AUTOENCODER_MAF = load_model(
-        os.path.join(AUTOENCODER_PATH, "nn_model_maf.keras")
-    )
-    bundle = jb.load(os.path.join(AUTOENCODER_PATH, "nn_model_preprocessing_maf.pkl"))
-    SCALAR_MAF = bundle["scaler"]
-    MU_MAF = bundle["mean"]
-    STD_MAF = bundle["std"]
-    THRESHOLD_MAF = bundle["threshold"]
-
-    # -------- EXHAUST --------
-    AUTOENCODER_EXHAUST = load_model(
-        os.path.join(AUTOENCODER_PATH, "nn_model_exhaust.keras")
-    )
-    bundle = jb.load(os.path.join(AUTOENCODER_PATH, "nn_model_preprocessing_exhaust.pkl"))
-    SCALAR_EXHAUST = bundle["scaler"]
-    MU_EXHAUST = bundle["mean"]
-    STD_EXHAUST = bundle["std"]
-    THRESHOLD_EXHAUST = bundle["threshold"]
-
-    # -------- SVM --------
-    SVM_MODEL = jb.load(SVM_PATH)
-
-    print("All trained models loaded successfully.")
+    _SVM_MODEL = jb.load(_SVM_PATH)
+    logger.info("All trained models loaded successfully.")
 
 
 load_trained_models()
 
 
 # -------------------------------------------------
-# Autoencoder Z Score
+# Inference helpers
 # -------------------------------------------------
 
-def compute_autoencoder_z(model, scaler, mu, std, threshold,values):
+def _compute_autoencoder_z(
+    model,
+    scaler,
+    threshold: float,
+    values: list,
+) -> float:
+    """Return non-negative z-score from autoencoder reconstruction error.
+
+    Args:
+        model: Loaded Keras autoencoder.
+        scaler: Fitted StandardScaler for this model's feature subset.
+        threshold: 99th-percentile healthy reconstruction error.
+        values: Feature values in training-time order.
+
+    Returns:
+        Non-negative float; 0.0 means within healthy distribution.
+    """
     X_scaled = scaler.transform(np.array(values).reshape(1, -1))
     recon = model.predict(X_scaled, verbose=0)
-    residual = (recon - X_scaled) ** 2
-    score = float(np.mean(residual))
-    z = np.log1p(score / max(threshold, 1e-10))
-    return max(z, 0.0)
+    score = float(np.mean((recon - X_scaled) ** 2))
+    z = np.log1p(score / max(threshold, Z_SCORE_EPSILON))
+    return max(float(z), 0.0)
 
 
-# -------------------------------------------------
-# SVM
-# -------------------------------------------------
+def _apply_svm(filtered_data: Dict[str, float]) -> float:
+    """Return non-negative SVM anomaly z-score.
 
-def apply_svm(filtered_data: dict):
-    cols = SVM_MODEL["columns"]
-    scaler = SVM_MODEL["scaler"]
-    svm = SVM_MODEL["svm_model"]
-    mean = SVM_MODEL["healthy_mean"]
-    std = max(SVM_MODEL["healthy_std"], 1e-10)
+    Args:
+        filtered_data: Kalman-filtered 12-channel sensor dict.
+
+    Returns:
+        Non-negative float; 0.0 means inside the healthy support.
+    """
+    cols   = _SVM_MODEL["columns"]
+    scaler = _SVM_MODEL["scaler"]
+    svm    = _SVM_MODEL["svm_model"]
+    mean   = _SVM_MODEL["healthy_mean"]
+    std    = max(float(_SVM_MODEL["healthy_std"]), Z_SCORE_EPSILON)
 
     X = np.array([filtered_data[c] for c in cols]).reshape(1, -1)
-    X_scaled = scaler.transform(X)
-    raw = -svm.decision_function(X_scaled)[0]
-    z = (raw - mean) / std
-
-    return max(float(z), 0.0)
+    raw = -svm.decision_function(scaler.transform(X))[0]
+    return max(float((raw - mean) / std), 0.0)
 
 
-# -------------------------------------------------
-# Mahalanobis
-# -------------------------------------------------
+def _apply_mahalanobis(filtered_data: Dict[str, float]) -> float:
+    """Return non-negative Mahalanobis z-score.
 
-SENSOR_COLS = [
-    "rpm", "fuel_rate", "turbo_speed", "boost_pressure",
-    "MAP", "IAT", "MAF", "EGT",
-    "exhaust_pressure", "VGT", "DPF_delta", "ambient_pressure"
-]
+    Args:
+        filtered_data: Kalman-filtered 12-channel sensor dict.
 
-
-def apply_mahalanobis(filtered_data: dict):
+    Returns:
+        Non-negative float; 0.0 means at the healthy distribution mean.
+    """
     x = np.array([filtered_data[c] for c in SENSOR_COLS])
-    z = MAHAL_MODEL.calculate_z_score(x)
-    return max(float(z), 0.0)
+    return max(float(_MAHAL_MODEL.calculate_z_score(x)), 0.0)
 
 
 # -------------------------------------------------
-# Main Pipeline
+# Public entry point
 # -------------------------------------------------
 
-def process_engine_data(sensor_data: dict):
+def process_engine_data(sensor_data: Dict[str, float]) -> Dict[str, float]:
+    """Run the full inference pipeline on one raw sensor reading.
 
-    # Step 1: Kalman
+    Steps: Kalman → 4 autoencoders → Mahalanobis → SVM → weighted L2 fusion.
+
+    Args:
+        sensor_data: Raw 12-channel sensor dict.
+
+    Returns:
+        Dict with keys: z_autoencoder_boost, z_autoencoder_dpf,
+        z_autoencoder_maf, z_autoencoder_exhaust, z_mahalanobis,
+        z_svm, z_cumulative.
+    """
     filtered_data = apply_kalman(sensor_data)
 
-    # Step 2: Autoencoders
-    z_boost = compute_autoencoder_z(
-        AUTOENCODER_BOOST,
-        SCALAR_BOOST,
-        MU_BOOST,
-        STD_BOOST,
-        THRESHOLD_BOOST,
-        [filtered_data[c] for c in
-         ["rpm", "fuel_rate", "turbo_speed", "exhaust_pressure", "boost_pressure"]]
-    )
+    z_boost   = _compute_autoencoder_z(_AUTOENCODER_BOOST,   _SCALAR_BOOST,
+                                       _THRESHOLD_BOOST,
+                                       [filtered_data[c] for c in AE_FEATURES["boost"]])
+    z_dpf     = _compute_autoencoder_z(_AUTOENCODER_DPF,     _SCALAR_DPF,
+                                       _THRESHOLD_DPF,
+                                       [filtered_data[c] for c in AE_FEATURES["dpf"]])
+    z_maf     = _compute_autoencoder_z(_AUTOENCODER_MAF,     _SCALAR_MAF,
+                                       _THRESHOLD_MAF,
+                                       [filtered_data[c] for c in AE_FEATURES["maf"]])
+    z_exhaust = _compute_autoencoder_z(_AUTOENCODER_EXHAUST, _SCALAR_EXHAUST,
+                                       _THRESHOLD_EXHAUST,
+                                       [filtered_data[c] for c in AE_FEATURES["exhaust"]])
 
-    z_dpf = compute_autoencoder_z(
-        AUTOENCODER_DPF,
-        SCALAR_DPF,
-        MU_DPF,
-        STD_DPF,
-        THRESHOLD_DPF,
-        [filtered_data[c] for c in
-         ["fuel_rate", "rpm", "MAF", "boost_pressure",
-          "turbo_speed", "exhaust_pressure", "DPF_delta"]]
-    )
+    z_mahal = _apply_mahalanobis(filtered_data)
+    z_svm   = _apply_svm(filtered_data)
 
-    z_maf = compute_autoencoder_z(
-        AUTOENCODER_MAF,
-        SCALAR_MAF,
-        MU_MAF,
-        STD_MAF,
-        THRESHOLD_MAF,
-        [filtered_data[c] for c in
-         ["rpm", "fuel_rate", "MAP", "IAT", "MAF"]]
-    )
-
-    z_exhaust = compute_autoencoder_z(
-        AUTOENCODER_EXHAUST,
-        SCALAR_EXHAUST,
-        MU_EXHAUST,
-        STD_EXHAUST,
-        THRESHOLD_EXHAUST,
-        [filtered_data[c] for c in
-         ["rpm", "fuel_rate", "MAF", "turbo_speed",
-          "DPF_delta", "exhaust_pressure"]]
-    )
-
-    # Step 3: Mahalanobis
-    z_mahal = apply_mahalanobis(filtered_data)
-
-    # Step 4: SVM
-    z_svm = apply_svm(filtered_data)
-
-    # Step 5: Cumulative
-    z_cumulative = np.sqrt(
-        z_boost**2 +
-        z_dpf**2 +
-        z_maf**2 +
-        z_exhaust**2 +
-        0.3*z_mahal**2 +
-        z_svm**2
-    )
-    
+    z_cumulative = float(np.sqrt(
+        z_boost**2   + z_dpf**2    + z_maf**2 + z_exhaust**2
+        + MAHAL_FUSION_WEIGHT * z_mahal**2
+        + z_svm**2
+    ))
 
     return {
-        "z_autoencoder_boost": z_boost,
-        "z_autoencoder_dpf": z_dpf,
-        "z_autoencoder_maf": z_maf,
+        "z_autoencoder_boost":   z_boost,
+        "z_autoencoder_dpf":     z_dpf,
+        "z_autoencoder_maf":     z_maf,
         "z_autoencoder_exhaust": z_exhaust,
-        "z_mahalanobis": z_mahal,
-        "z_svm": z_svm,
-        "z_cumulative": float(z_cumulative),
+        "z_mahalanobis":         z_mahal,
+        "z_svm":                 z_svm,
+        "z_cumulative":          z_cumulative,
     }

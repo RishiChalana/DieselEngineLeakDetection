@@ -1,114 +1,180 @@
 """
-ModelStack: singleton wrapper around all trained ML artifacts.
-Used by engine_simulator/app.py (Streamlit dashboard).
-evaluate(filtered_data) takes already Kalman-filtered sensor dict.
-predict(sensor_data) applies internal Kalman first.
+model_stack.py — Singleton wrapper around all trained ML model artifacts.
+
+Used by engine_simulator/app.py (Streamlit dashboard) and by the REST
+/api/predict view as an alternative entry point.
+
+Two public methods:
+  evaluate(filtered_data)  — takes already Kalman-filtered sensor dict.
+  predict(sensor_data)     — applies internal Kalman filter then evaluates.
+
+Loading happens once on first instantiation (singleton pattern via __new__).
 """
+import logging
 import sys
 from pathlib import Path
+from typing import Any, Dict, List, Optional
 
 import joblib as jb
 import numpy as np
 from tensorflow.keras.models import load_model
 
-# Ensure project root is on sys.path so sibling ml_model imports resolve
+# Ensure project root is on sys.path so config and ml_model sub-packages resolve.
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
+from config.constants import (
+    AE_FEATURES,
+    AUTOENCODER_MODEL_FILES,
+    AUTOENCODER_PREPROCESSING_FILES,
+    AUTOENCODER_SUBPATH,
+    MAHAL_SUBPATH,
+    MODEL_STACK_ANOMALY_THRESHOLD,
+    SENSOR_COLS,
+    SVM_SUBPATH,
+    Z_SCORE_EPSILON,
+)
 from ml_model.kalman.kalman_layer import KalmanLayer
 from ml_model.models.mahalanobis.distance import MahalanobisDistance
 
+logger = logging.getLogger(__name__)
+
 _MODELS_DIR = Path(__file__).resolve().parent
-_AE_PATH = _MODELS_DIR / "autoencoders" / "residual_score" / "encoded_model"
-_SVM_PATH = _MODELS_DIR / "svm" / "encoded" / "svm_model.joblib"
-
-_SENSOR_COLS = [
-    "rpm", "fuel_rate", "turbo_speed", "boost_pressure",
-    "MAP", "IAT", "MAF", "EGT",
-    "exhaust_pressure", "VGT", "DPF_delta", "ambient_pressure",
-]
-
-_AE_FEATURES = {
-    "boost":   ["rpm", "fuel_rate", "turbo_speed", "exhaust_pressure", "boost_pressure"],
-    "dpf":     ["fuel_rate", "rpm", "MAF", "boost_pressure", "turbo_speed", "exhaust_pressure", "DPF_delta"],
-    "maf":     ["rpm", "fuel_rate", "MAP", "IAT", "MAF"],
-    "exhaust": ["rpm", "fuel_rate", "MAF", "turbo_speed", "DPF_delta", "exhaust_pressure"],
-}
-
-ANOMALY_THRESHOLD = 3.5
+_AE_PATH = _MODELS_DIR / AUTOENCODER_SUBPATH
+_SVM_PATH = _MODELS_DIR / SVM_SUBPATH
+_MAHAL_PATH = _MODELS_DIR / MAHAL_SUBPATH
 
 
-def _autoencoder_z(model, scaler, threshold, values):
+def _autoencoder_z(
+    model: Any,
+    scaler: Any,
+    threshold: float,
+    values: List[float],
+) -> float:
+    """Compute a non-negative z-score from autoencoder reconstruction error.
+
+    Args:
+        model: Loaded Keras autoencoder model.
+        scaler: Fitted StandardScaler for the model's feature subset.
+        threshold: 99th-percentile reconstruction error on healthy training data.
+        values: Raw feature values in the order the model was trained on.
+
+    Returns:
+        Non-negative float; 0.0 for healthy, higher for more anomalous.
+    """
     X = scaler.transform(np.array(values).reshape(1, -1))
     recon = model.predict(X, verbose=0)
     score = float(np.mean((recon - X) ** 2))
-    return max(float(np.log1p(score / max(threshold, 1e-10))), 0.0)
+    return max(float(np.log1p(score / max(threshold, Z_SCORE_EPSILON))), 0.0)
 
 
 class ModelStack:
-    """Singleton — models are loaded once and reused across all calls."""
+    """Singleton inference stack: Kalman → 4 AEs → SVM → Mahalanobis → fusion.
 
-    _singleton = None
+    Attributes:
+        _singleton: Class-level reference to the single instance.
+        _loaded: Guards against re-loading on repeated ``__init__`` calls.
+    """
 
-    def __new__(cls):
+    _singleton: Optional["ModelStack"] = None
+
+    def __new__(cls) -> "ModelStack":
+        """Return the existing instance or create and store a new one."""
         if cls._singleton is None:
             instance = super().__new__(cls)
             instance._loaded = False
             cls._singleton = instance
         return cls._singleton
 
-    def __init__(self):
+    def __init__(self) -> None:
+        """Load all model artifacts (runs once; subsequent calls are no-ops)."""
         if self._loaded:
             return
-        self._load()
+        self._load_models()
         self._loaded = True
 
     # ------------------------------------------------------------------
-    # Model loading
+    # Loading
     # ------------------------------------------------------------------
 
-    def _load(self):
-        self._ae = {}
-        self._scaler_ae = {}
-        self._threshold_ae = {}
+    def _load_models(self) -> None:
+        """Load all .keras, .joblib, and .pkl artifacts from disk."""
+        logger.info("ModelStack: loading all model artifacts…")
+
+        self._ae: Dict[str, Any] = {}
+        self._scaler_ae: Dict[str, Any] = {}
+        self._threshold_ae: Dict[str, float] = {}
 
         for name in ("boost", "dpf", "maf", "exhaust"):
-            self._ae[name] = load_model(_AE_PATH / f"nn_model_{name}.keras")
-            bundle = jb.load(_AE_PATH / f"nn_model_preprocessing_{name}.pkl")
+            self._ae[name] = load_model(_AE_PATH / AUTOENCODER_MODEL_FILES[name])
+            bundle = jb.load(_AE_PATH / AUTOENCODER_PREPROCESSING_FILES[name])
             self._scaler_ae[name] = bundle["scaler"]
-            self._threshold_ae[name] = bundle["threshold"]
+            self._threshold_ae[name] = float(bundle["threshold"])
 
-        self._svm_bundle = jb.load(_SVM_PATH)
+        self._svm_bundle: Dict[str, Any] = jb.load(_SVM_PATH)
         self._mahal = MahalanobisDistance()
         self._kalman = KalmanLayer()
 
-        print("[ModelStack] All models loaded.")
+        logger.info("ModelStack: all artifacts loaded successfully.")
 
     # ------------------------------------------------------------------
     # Inference helpers
     # ------------------------------------------------------------------
 
-    def _z_svm(self, fd: dict) -> float:
-        cols = self._svm_bundle["columns"]
+    def _z_svm(self, fd: Dict[str, float]) -> float:
+        """Compute SVM z-score from calibrated decision function.
+
+        Args:
+            fd: Kalman-filtered sensor dict.
+
+        Returns:
+            Non-negative z-score; 0.0 for healthy.
+        """
+        cols: List[str] = self._svm_bundle["columns"]
         scaler = self._svm_bundle["scaler"]
         svm = self._svm_bundle["svm_model"]
-        mean = self._svm_bundle["healthy_mean"]
-        std = max(self._svm_bundle["healthy_std"], 1e-10)
+        mean: float = self._svm_bundle["healthy_mean"]
+        std: float = max(float(self._svm_bundle["healthy_std"]), Z_SCORE_EPSILON)
 
         X = np.array([fd[c] for c in cols]).reshape(1, -1)
-        raw = -svm.decision_function(scaler.transform(X))[0]
+        raw: float = -svm.decision_function(scaler.transform(X))[0]
         return max(float((raw - mean) / std), 0.0)
 
-    def _z_mahal(self, fd: dict) -> float:
-        x = np.array([fd[c] for c in _SENSOR_COLS])
+    def _z_mahal(self, fd: Dict[str, float]) -> float:
+        """Compute Mahalanobis z-score.
+
+        Args:
+            fd: Kalman-filtered sensor dict.
+
+        Returns:
+            Non-negative float; 0.0 for in-distribution.
+        """
+        x = np.array([fd[c] for c in SENSOR_COLS])
         return max(float(self._mahal.calculate_z_score(x)), 0.0)
 
-    def _infer_leak_type(self, z_boost, z_maf, z_exhaust, z_dpf) -> str:
+    def _infer_leak_type(
+        self,
+        z_boost: float,
+        z_maf: float,
+        z_exhaust: float,
+        z_dpf: float,
+    ) -> str:
+        """Map the dominant autoencoder score to a leak-type label.
+
+        Args:
+            z_boost: Boost-subsystem autoencoder z-score.
+            z_maf: MAF-subsystem autoencoder z-score.
+            z_exhaust: Exhaust-subsystem autoencoder z-score.
+            z_dpf: DPF-subsystem autoencoder z-score.
+
+        Returns:
+            One of ``"charge_air"``, ``"precompressor"``, ``"exhaust"``.
+        """
         scores = {
-            "charge_air": z_boost,
+            "charge_air":    z_boost,
             "precompressor": z_maf,
-            "exhaust": z_exhaust,
+            "exhaust":       z_exhaust,
         }
         return max(scores, key=scores.get)
 
@@ -116,61 +182,98 @@ class ModelStack:
     # Public API
     # ------------------------------------------------------------------
 
-    def evaluate(self, filtered_data: dict) -> dict:
-        """Run full inference on already Kalman-filtered sensor data."""
+    def evaluate(self, filtered_data: Dict[str, float]) -> Dict[str, Any]:
+        """Run full inference on already Kalman-filtered sensor data.
+
+        Args:
+            filtered_data: Sensor dict after Kalman smoothing (12 channels).
+
+        Returns:
+            Dict with keys: ``final_score``, ``physics_score``, ``svm_z``,
+            ``ae_z``, ``boost_z``, ``maf_z``, ``exhaust_z``, ``dpf_z``,
+            ``z_cumulative``, ``z_mahalanobis``, ``is_leak``, ``confidence``,
+            ``z_scores``, ``leak_type``.
+        """
         fd = filtered_data
 
-        z_boost = _autoencoder_z(
-            self._ae["boost"], self._scaler_ae["boost"], self._threshold_ae["boost"],
-            [fd[c] for c in _AE_FEATURES["boost"]],
-        )
-        z_dpf = _autoencoder_z(
-            self._ae["dpf"], self._scaler_ae["dpf"], self._threshold_ae["dpf"],
-            [fd[c] for c in _AE_FEATURES["dpf"]],
-        )
-        z_maf = _autoencoder_z(
-            self._ae["maf"], self._scaler_ae["maf"], self._threshold_ae["maf"],
-            [fd[c] for c in _AE_FEATURES["maf"]],
-        )
-        z_exhaust = _autoencoder_z(
-            self._ae["exhaust"], self._scaler_ae["exhaust"], self._threshold_ae["exhaust"],
-            [fd[c] for c in _AE_FEATURES["exhaust"]],
-        )
+        z_boost   = _autoencoder_z(self._ae["boost"],   self._scaler_ae["boost"],
+                                   self._threshold_ae["boost"],
+                                   [fd[c] for c in AE_FEATURES["boost"]])
+        z_dpf     = _autoencoder_z(self._ae["dpf"],     self._scaler_ae["dpf"],
+                                   self._threshold_ae["dpf"],
+                                   [fd[c] for c in AE_FEATURES["dpf"]])
+        z_maf     = _autoencoder_z(self._ae["maf"],     self._scaler_ae["maf"],
+                                   self._threshold_ae["maf"],
+                                   [fd[c] for c in AE_FEATURES["maf"]])
+        z_exhaust = _autoencoder_z(self._ae["exhaust"], self._scaler_ae["exhaust"],
+                                   self._threshold_ae["exhaust"],
+                                   [fd[c] for c in AE_FEATURES["exhaust"]])
 
-        z_mahal = self._z_mahal(fd)
-        z_svm = self._z_svm(fd)
+        z_mahal   = self._z_mahal(fd)
+        z_svm     = self._z_svm(fd)
 
+        from config.constants import MAHAL_FUSION_WEIGHT
         z_cumulative = float(np.sqrt(
-            z_boost**2 + z_dpf**2 + z_maf**2 + z_exhaust**2
-            + 0.3 * z_mahal**2 + z_svm**2
+            z_boost**2   + z_dpf**2 + z_maf**2 + z_exhaust**2
+            + MAHAL_FUSION_WEIGHT * z_mahal**2
+            + z_svm**2
         ))
 
-        physics_score = max(z_boost, z_maf, z_exhaust, z_dpf)
-        ae_z = float(np.mean([z_boost, z_dpf, z_maf, z_exhaust]))
-        is_leak = z_cumulative > ANOMALY_THRESHOLD
-        confidence = round(min(z_cumulative / (ANOMALY_THRESHOLD * 2), 1.0), 4)
-        leak_type = self._infer_leak_type(z_boost, z_maf, z_exhaust, z_dpf) if is_leak else None
+        physics_score: float = max(z_boost, z_maf, z_exhaust, z_dpf)
+        ae_z: float          = float(np.mean([z_boost, z_dpf, z_maf, z_exhaust]))
+        is_leak: bool        = z_cumulative > MODEL_STACK_ANOMALY_THRESHOLD
+        confidence: float    = round(
+            min(z_cumulative / max(MODEL_STACK_ANOMALY_THRESHOLD * 2, Z_SCORE_EPSILON), 1.0),
+            4,
+        )
+        leak_type: Optional[str] = (
+            self._infer_leak_type(z_boost, z_maf, z_exhaust, z_dpf) if is_leak else None
+        )
 
         return {
-            # app.py expected keys
-            "final_score": z_cumulative,
+            # Keys expected by engine_simulator/app.py
+            "final_score":   z_cumulative,
             "physics_score": physics_score,
-            "svm_z": z_svm,
-            "ae_z": ae_z,
-            "boost_z": z_boost,
-            "maf_z": z_maf,
-            "exhaust_z": z_exhaust,
-            "dpf_z": z_dpf,
-            # consumer / API extended keys
-            "z_cumulative": z_cumulative,
-            "z_mahalanobis": z_mahal,
-            "is_leak": is_leak,
-            "confidence": confidence,
-            "z_scores": [z_boost, z_dpf, z_maf, z_exhaust, z_mahal, z_svm],
-            "leak_type": leak_type,
+            "svm_z":         z_svm,
+            "ae_z":          ae_z,
+            "boost_z":       z_boost,
+            "maf_z":         z_maf,
+            "exhaust_z":     z_exhaust,
+            "dpf_z":         z_dpf,
+            # Extended keys for REST / WebSocket consumers
+            "z_cumulative":   z_cumulative,
+            "z_mahalanobis":  z_mahal,
+            "is_leak":        is_leak,
+            "confidence":     confidence,
+            "z_scores":       [z_boost, z_dpf, z_maf, z_exhaust, z_mahal, z_svm],
+            "leak_type":      leak_type,
         }
 
-    def predict(self, sensor_data: dict) -> dict:
-        """Run full pipeline: internal Kalman filter → evaluate."""
+    def predict(self, sensor_data: Dict[str, float]) -> Dict[str, Any]:
+        """Run full pipeline: internal Kalman filter then evaluate.
+
+        Args:
+            sensor_data: Raw 12-channel sensor dict (pre-Kalman).
+
+        Returns:
+            Same dict as ``evaluate()``.
+        """
         filtered = self._kalman.filter(sensor_data)
         return self.evaluate(filtered)
+
+    def health_check(self) -> Dict[str, Any]:
+        """Return a dict confirming all sub-models are loaded.
+
+        Returns:
+            Dict with keys ``all_loaded`` (bool) and ``components`` (list).
+        """
+        components = ["ae_boost", "ae_dpf", "ae_maf", "ae_exhaust",
+                      "svm", "mahalanobis", "kalman"]
+        all_loaded = (
+            self._loaded
+            and all(k in self._ae for k in ("boost", "dpf", "maf", "exhaust"))
+            and self._svm_bundle is not None
+            and self._mahal is not None
+            and self._kalman is not None
+        )
+        return {"all_loaded": all_loaded, "components": components}
