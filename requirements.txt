@@ -1,0 +1,17 @@
+pandas
+numpy
+matplotlib
+joblib
+scikit-learn
+tensorflow
+django
+djangorestframework
+asyncio
+gunicorn
+streamlit
+channels
+plotly
+daphne
+dotenv
+dj_database_url
+psycopg2
