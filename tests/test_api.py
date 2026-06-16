@@ -1,84 +1,211 @@
 """
-test_api.py — Integration tests for the REST API endpoints.
+test_api.py — Integration tests for REST API endpoints.
 
-Tests /user_auth/ and /api/predict using Django's test client.
-Requires a migrated test database (handled automatically by pytest-django).
+Covers authentication, predict, batch session analysis, and health check.
+Requires Django DB (pytest-django handles test database setup).
 
-Run with:  pytest tests/test_api.py -v --ds=diesel_engine_predictor.settings
+Run:  pytest tests/test_api.py -v
 """
+import io
+import csv
 import sys
 from pathlib import Path
 
 import pytest
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[1]
-if str(_PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(_PROJECT_ROOT))
+_BACKEND_ROOT = _PROJECT_ROOT / "backend" / "diesel_engine_predictor"
+for _p in (_PROJECT_ROOT, _BACKEND_ROOT):
+    if str(_p) not in sys.path:
+        sys.path.insert(0, str(_p))
 
-# Minimal healthy sensor payload matching all 12 required channels.
-_HEALTHY_PAYLOAD = {
+from config.constants import SENSOR_COLS
+from ml_model.data_gen.engine_simulator_core import EngineSimulator
+
+# A valid 12-channel payload built from realistic operating values
+_VALID_PAYLOAD = {
     "rpm": 1600.0,
     "fuel_rate": 75.0,
     "turbo_speed": 90000.0,
-    "boost_pressure": 1.2,
-    "MAP": 2.2,
+    "boost_pressure": 1.4,
+    "MAP": 2.3,
     "IAT": 305.0,
-    "MAF": 500.0,
-    "EGT": 650.0,
-    "exhaust_pressure": 2.5,
-    "VGT": 50.0,
-    "DPF_delta": 20000.0,
-    "ambient_pressure": 1.0,
+    "MAF": 520.0,
+    "EGT": 680.0,
+    "exhaust_pressure": 2.6,
+    "VGT": 48.0,
+    "DPF_delta": 22000.0,
+    "ambient_pressure": 1.01,
 }
 
 
-@pytest.mark.django_db
-def test_signup_creates_user_and_returns_token(client) -> None:
-    """POST /user_auth/signup/ should return 201 with a token."""
-    # TODO: assert response.status_code == 201
-    # TODO: assert "token" in response.json()
-    pass
+def _make_user(username="testuser", password="testpass123"):
+    from django.contrib.auth import get_user_model
+    User = get_user_model()
+    return User.objects.create_user(username=username, password=password, email=f"{username}@test.com")
 
 
-@pytest.mark.django_db
-def test_login_with_valid_credentials_returns_token(client) -> None:
-    """POST /user_auth/login/ should return 200 with token for valid user."""
-    pass
+def _get_token(user):
+    from rest_framework.authtoken.models import Token
+    token, _ = Token.objects.get_or_create(user=user)
+    return token.key
 
 
-@pytest.mark.django_db
-def test_login_with_invalid_credentials_returns_401(client) -> None:
-    """POST /user_auth/login/ should return 401 for wrong password."""
-    pass
+def _authed_client(token_key: str):
+    from rest_framework.test import APIClient
+    client = APIClient()
+    client.credentials(HTTP_AUTHORIZATION=f"Token {token_key}")
+    return client
 
 
-@pytest.mark.django_db
-def test_predict_without_auth_returns_401(client) -> None:
-    """POST /api/predict without token should return 401."""
-    # TODO: assert client.post("/api/predict", ...).status_code == 401
-    pass
-
+# ---------------------------------------------------------------------------
+# Auth endpoints
+# ---------------------------------------------------------------------------
 
 @pytest.mark.django_db
-def test_predict_with_missing_channels_returns_400(client) -> None:
-    """POST /api/predict missing required channels should return 400."""
-    pass
-
-
-@pytest.mark.django_db
-def test_predict_with_valid_payload_returns_200(client) -> None:
-    """POST /api/predict with all 12 channels should return 200 with is_leak key."""
-    # TODO: assert "is_leak" in response.json()
-    pass
+def test_signup_creates_user_and_returns_token() -> None:
+    from rest_framework.test import APIClient
+    resp = APIClient().post(
+        "/user_auth/signup/",
+        {"username": "newuser", "password": "newpass123", "email": "new@test.com"},
+        format="json",
+    )
+    assert resp.status_code == 201
+    assert "token" in resp.data
 
 
 @pytest.mark.django_db
-def test_predict_response_has_all_required_keys(client) -> None:
-    """POST /api/predict response must include all documented output fields."""
-    pass
+def test_login_with_valid_credentials_returns_token() -> None:
+    from rest_framework.test import APIClient
+    _make_user(username="loginuser", password="loginpass123")
+    resp = APIClient().post(
+        "/user_auth/login/",
+        {"username": "loginuser", "password": "loginpass123"},
+        format="json",
+    )
+    assert resp.status_code == 200
+    assert "token" in resp.data
 
 
 @pytest.mark.django_db
-def test_logout_invalidates_token(client) -> None:
-    """POST /user_auth/logout/ should return 200 and invalidate the token."""
-    pass
+def test_login_with_wrong_password_returns_401() -> None:
+    from rest_framework.test import APIClient
+    _make_user(username="badlogin", password="correctpass")
+    resp = APIClient().post(
+        "/user_auth/login/",
+        {"username": "badlogin", "password": "wrongpass"},
+        format="json",
+    )
+    assert resp.status_code == 401
+
+
+@pytest.mark.django_db
+def test_logout_invalidates_token() -> None:
+    user = _make_user(username="logoutuser", password="logoutpass")
+    token = _get_token(user)
+    client = _authed_client(token)
+    resp = client.post("/user_auth/logout/")
+    assert resp.status_code == 200
+    # Second logout with the same (now-deleted) token should fail
+    resp2 = client.post("/user_auth/logout/")
+    assert resp2.status_code in {401, 403}
+
+
+# ---------------------------------------------------------------------------
+# Health check
+# ---------------------------------------------------------------------------
+
+@pytest.mark.django_db
+def test_health_check_returns_ok() -> None:
+    from rest_framework.test import APIClient
+    resp = APIClient().get("/user_auth/health/")
+    assert resp.status_code == 200
+    assert resp.data["status"] == "ok"
+
+
+# ---------------------------------------------------------------------------
+# Predict endpoint
+# ---------------------------------------------------------------------------
+
+@pytest.mark.django_db
+def test_predict_requires_auth() -> None:
+    from rest_framework.test import APIClient
+    resp = APIClient().post("/api/predict", _VALID_PAYLOAD, format="json")
+    assert resp.status_code in {401, 403}
+
+
+@pytest.mark.django_db
+def test_predict_with_missing_channels_returns_400() -> None:
+    user = _make_user(username="partial", password="partialpass")
+    client = _authed_client(_get_token(user))
+    resp = client.post("/api/predict", {"rpm": 1600.0}, format="json")
+    assert resp.status_code == 400
+    assert "missing" in str(resp.data).lower() or "error" in resp.data
+
+
+@pytest.mark.django_db
+def test_predict_with_valid_payload_returns_200() -> None:
+    user = _make_user(username="predictuser", password="predictpass")
+    client = _authed_client(_get_token(user))
+    resp = client.post("/api/predict", _VALID_PAYLOAD, format="json")
+    assert resp.status_code == 200
+
+
+@pytest.mark.django_db
+def test_predict_response_has_five_section_structure() -> None:
+    user = _make_user(username="structuser", password="structpass")
+    client = _authed_client(_get_token(user))
+    resp = client.post("/api/predict", _VALID_PAYLOAD, format="json")
+    assert resp.status_code == 200
+    for key in ("steady_state", "detection", "isolation", "decision", "metadata"):
+        assert key in resp.data, f"Missing top-level key: {key}"
+    assert resp.data["decision"]["flag"] in {"PASS", "WARNING", "FAIL"}
+
+
+# ---------------------------------------------------------------------------
+# Batch session endpoint
+# ---------------------------------------------------------------------------
+
+def _generate_csv(n_rows: int = 20, seed: int = 77) -> bytes:
+    sim = EngineSimulator(seed=seed)
+    for _ in range(60):
+        sim.step()
+    buf = io.StringIO()
+    writer = csv.DictWriter(buf, fieldnames=SENSOR_COLS)
+    writer.writeheader()
+    for _ in range(n_rows):
+        writer.writerow(sim.step())
+    return buf.getvalue().encode()
+
+
+@pytest.mark.django_db
+@pytest.mark.slow
+def test_batch_with_valid_csv_returns_go_no_go() -> None:
+    from django.core.files.uploadedfile import SimpleUploadedFile
+    user = _make_user(username="batchuser", password="batchpass")
+    client = _authed_client(_get_token(user))
+    csv_file = SimpleUploadedFile("session.csv", _generate_csv(20), content_type="text/csv")
+    resp = client.post("/api/session/", {"file": csv_file}, format="multipart")
+    assert resp.status_code == 200
+    assert "header" in resp.data
+    assert resp.data["header"]["go_nogo"] in {"GO", "CAUTION", "NO-GO"}
+
+
+@pytest.mark.django_db
+def test_batch_with_missing_columns_returns_400() -> None:
+    from django.core.files.uploadedfile import SimpleUploadedFile
+    user = _make_user(username="badcsv", password="badcsvpass")
+    client = _authed_client(_get_token(user))
+    bad_csv = b"col_a,col_b\n1.0,2.0\n3.0,4.0\n"
+    csv_file = SimpleUploadedFile("bad.csv", bad_csv, content_type="text/csv")
+    resp = client.post("/api/session/", {"file": csv_file}, format="multipart")
+    assert resp.status_code == 400
+
+
+@pytest.mark.django_db
+def test_batch_requires_auth() -> None:
+    from rest_framework.test import APIClient
+    from django.core.files.uploadedfile import SimpleUploadedFile
+    csv_file = SimpleUploadedFile("test.csv", _generate_csv(5), content_type="text/csv")
+    resp = APIClient().post("/api/session/", {"file": csv_file}, format="multipart")
+    assert resp.status_code in {401, 403}

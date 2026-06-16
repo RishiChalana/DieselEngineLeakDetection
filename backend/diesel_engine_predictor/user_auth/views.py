@@ -47,6 +47,13 @@ class Delete_Account(APIView):
         request.auth.delete()
         user.delete()
         return Response({'message':"User successfully deleted"},status=status.HTTP_200_OK)
+
+
+class Health(APIView):
+    """Lightweight health check — no auth required (used by Docker healthcheck)."""
+
+    def get(self, request, *args, **kwargs):
+        return Response({"status": "ok"}, status=status.HTTP_200_OK)
         
         
 

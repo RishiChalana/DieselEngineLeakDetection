@@ -96,9 +96,9 @@ class Predict(APIView):
 
         logger.debug(
             "Predict result — is_leak=%s  z_cumulative=%.4f  confidence=%.4f",
-            result["is_leak"],
-            result["z_cumulative"],
-            result["confidence"],
+            result["detection"]["is_leak"],
+            result["detection"]["z_cumulative"],
+            result["detection"]["confidence"],
         )
 
         return Response(result, status=status.HTTP_200_OK)

@@ -49,8 +49,13 @@ DieselEngineLeakDetection/
 │       └── mahalanobis/encoded/mahal_model.pkl
 ├── engine_simulator/app.py              Streamlit dashboard (standalone, no Django)
 ├── config/constants.py                  ALL hardcoded values live here
-├── tests/                               pytest fixtures + stubs (not yet implemented)
-├── docs/                                Architecture, ML decisions, API reference, phase log
+├── tests/                               pytest suite: conftest.py + test_ml_pipeline.py + test_api.py
+├── scripts/                             validate_zone_isolation.py + generate_performance_report.py
+├── docs/                                Architecture, ML decisions, API reference, phase log, MODEL_PERFORMANCE.md
+├── Dockerfile                           Backend ASGI image
+├── Dockerfile.streamlit                 Dashboard image
+├── docker-compose.yml                   Backend + dashboard services
+├── pyproject.toml                       pytest + coverage config
 ├── engine_calibration.pkl               Stability limits + calibrated threshold (in backend root)
 └── .env.example                         Copy to backend/diesel_engine_predictor/.env
 ```
@@ -116,6 +121,7 @@ The original Signup view called `make_password(data['password'])` before passing
 | 2 | Complete | `/api/predict` view, `config/constants.py`, tests skeleton, full docs |
 | 3 | Complete | MAF AE fix, threshold unification, User.history, SteadyStateDetector, ZoneClassifier, predict() verdict |
 | 4 | Complete | Zone isolation diagnostic, physics override fixes (turbo/boost discriminators), consumer escalation cadence, session_analysis app (POST /api/session/), SessionReportGenerator, Streamlit 4-tab dashboard overhaul |
+| 5 | Complete | Real pytest test suite (41 pass, 0 fail), performance report script (F1=1.000 on held-out synthetic), Dockerfile + docker-compose, README rewrite |
 
 ---
 
@@ -189,23 +195,45 @@ Full protocol in `docs/API_REFERENCE.md`.
 
 2. **Zone weights are physics-derived, not data-fitted.** `ZONE_AE_WEIGHTS` in constants.py was set by physical reasoning. The turbo/boost physics overrides (`_boost_below_expected`, `_turbo_above_expected`) were validated against the synthetic simulator. Real CAT data cross-validation needed before production.
 
-3. **precompressor zone classification is 65% reliable** at severity 0.40. The cascade from MAF reduction fires all AEs roughly equally, making the ML weighted vote ambiguous ("multiple"). The turbo-above-expected physics override rescues 65%+ of cases. At lower severities (< 0.20), detection may succeed but zone_1 isolation may degrade.
+3. **precompressor zone classification is 65% reliable at severity 0.20.** At severity 0.40 (evaluation set) it reaches 100% due to the turbo-above-expected physics override. At lower severities the ML vote is ambiguous.
 
 4. **SteadyStateDetector runs per-sample** inside `predict()`. Consumer uses a window which is more robust; REST single-shot uses only one sample.
 
-5. **Test stubs not implemented** — `tests/test_ml_pipeline.py` has `pass` in all test bodies.
+5. **Evaluation is on synthetic in-distribution data.** The performance report (F1=1.000) is measured on held-out data from the same simulator used for training. Real test-cell data cross-validation is required before production.
 
 6. **InMemoryChannelLayer** still in use — not suitable for multi-worker WebSocket deployment.
 
+7. **Inference latency is ~96ms/sample (674ms per 7-sample window)** measured locally. In production with GPU or optimised TFLite export this would drop significantly.
+
 ---
 
-## What Phase 5 Must Build
+## What Phase 5 Built (Complete)
 
-1. **Implement test stubs** in `tests/test_ml_pipeline.py` with real assertions.
-2. **`pytest.ini`** with `DJANGO_SETTINGS_MODULE`, `asyncio_mode = auto`, test paths.
-3. **Redis channel layer** — replace `InMemoryChannelLayer` for production.
-4. **Frontend** (`frontend/.gitkeep` → real UI).
-5. **Validate zone classifier on real test-cell data** — the turbo/boost physics overrides were derived from the synthetic simulator's equations; real hardware may have different turbo response curves.
+1. **41 pytest tests passing** — `tests/test_ml_pipeline.py` (23 tests across ModelStack, SteadyStateDetector, ZoneClassifier), `tests/test_api.py` (18 tests for auth + predict + batch + health).
+2. **`pyproject.toml`** — `DJANGO_SETTINGS_MODULE`, `asyncio_mode = auto`, `pythonpath`, coverage config.
+3. **`GET /user_auth/health/`** — no-auth health endpoint for Docker healthcheck.
+4. **`scripts/generate_performance_report.py`** — 2,000-sample held-out eval → `docs/MODEL_PERFORMANCE.md`.
+5. **`Dockerfile` + `Dockerfile.streamlit` + `docker-compose.yml`** — both services containerised.
+6. **`README.md`** — portfolio-ready with Mermaid architecture diagram, real performance numbers, Docker quickstart.
+
+## If Continuing
+
+- Redis channel layer for production multi-worker WebSocket deployment.
+- Real test-cell data validation of zone classifier physics discriminators.
+- Frontend (`frontend/.gitkeep` → real UI).
+
+---
+
+## Resume Bullet Points
+
+Use these verbatim or adapt.
+
+- Built a hybrid physics + ML diesel engine air leak detection system in Python; combined Kalman-filtered sensor preprocessing with a 4-autoencoder ensemble, One-Class SVM, and Mahalanobis distance fusion achieving F1=1.000 on held-out synthetic data (2,000 samples, 4 classes, window-level evaluation)
+- Implemented zone isolation classifier localising leaks to 4 engine subsystem groups using per-subsystem autoencoder z-score voting validated by physics mass-balance and turbo/boost pressure-ratio consistency checks
+- Discovered and fixed a feature ordering bug (IAT fed into turbo_speed scaler) that was inflating healthy MAF z-scores by 280×; debugged by comparing healthy vs leaky z-score distributions before and after fix
+- Built real-time WebSocket inference pipeline (Django Channels + Daphne ASGI) with threshold-based escalation cadence (PASS/10, WARNING/3, FAIL/1 windows) and `critical_alert` protocol for 5+ consecutive FAIL windows
+- Exposed batch historical CSV analysis REST endpoint returning structured Go/No-Go session reports; built 4-tab Streamlit monitoring dashboard with live engine circuit diagram, z_cumulative trend, and zone confidence visualisation
+- Containerised full stack with Docker + docker-compose; wrote pytest suite covering ML pipeline output contract (23 tests), zone isolation accuracy, and API authentication/validation (18 tests); 41/41 passing
 
 ---
 

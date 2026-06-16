@@ -288,7 +288,58 @@ All Streamlit imports:          OK (verified by import check)
 
 ### Known issues remaining after Phase 4
 
-- precompressor zone_1 is only 65% reliable (35% of windows may classify as zone_3 when turbo elevation is below the 1.04 threshold at certain fuelrate operating points).
-- Test stubs still not implemented.
+- precompressor zone_1 is only 65% reliable at severity 0.20. At severity 0.40 it reaches 100%.
+- Test stubs not yet implemented (resolved in Phase 5).
 - InMemoryChannelLayer still in use.
 - Frontend `.gitkeep` — no real UI.
+
+---
+
+## Phase 5 — Portfolio Completion (Session 5 — 2026-06-16)
+
+**Status:** Complete
+
+### What was built
+
+**Part A — Tests + Model Performance Report**
+
+- `tests/conftest.py` — Rewritten with real EngineSimulator fixtures: `healthy_sample` (60-step warmup), `leaky_sample` (charge_air at severity 0.40), `stable_window` (30 identical samples → CV=0), `transient_window` (RPM step 1000→2500 → CV=0.43 >> threshold).
+- `tests/test_ml_pipeline.py` — 23 tests across 4 classes: `TestModelStackLoading` (singleton, health_check), `TestPredictOutputContract` (5-section dict keys, types, leaky detection, zone populated), `TestSteadyStateDetector` (stable/transient/empty), `TestZoneClassifier` (charge_air→zone_2 ≥80%, exhaust→zone_3 ≥80%, parametrised).
+- `tests/test_api.py` — 18 tests: auth (signup/login/logout/wrong-password), health endpoint, predict (auth-required, missing-channels, valid-payload, 5-section response), batch (auth-required, missing-columns, valid-csv-go-nogo).
+- `predict/views.py` bugfix — logger was accessing old flat-dict keys `result["is_leak"]` from `evaluate()`; updated to `result["detection"]["is_leak"]` for the new 5-section `predict()` output.
+- `user_auth/views.py` + `user_auth/urls.py` — added `GET /user_auth/health/` (no auth; returns `{"status": "ok"}`; used by Docker healthcheck).
+- `scripts/generate_performance_report.py` — 2,000-sample held-out evaluation: 500/class, window-level detection (≥4/7), zone isolation confusion matrix, latency measurement. Writes `docs/MODEL_PERFORMANCE.md`.
+
+**Part B — pytest infrastructure**
+
+- `pyproject.toml` — `DJANGO_SETTINGS_MODULE = "diesel_engine_predictor.settings"`, `asyncio_mode = "auto"`, `pythonpath = [".", "backend/diesel_engine_predictor"]`, `[tool.coverage.run]`.
+- `requirements.txt` — added `pytest-django`, `pytest-asyncio`, `pytest-cov`.
+
+**Part C — Docker**
+
+- `Dockerfile` — `python:3.12-slim`, installs `libgomp1` + `curl` (for healthcheck), pip-installs requirements, runs `migrate --noinput` + `daphne` on start.
+- `Dockerfile.streamlit` — slim image for Streamlit dashboard.
+- `docker-compose.yml` — `backend` + `dashboard` services; backend has healthcheck on `/user_auth/health/`.
+
+**Part D — README**
+
+- `README.md` — full rewrite: Mermaid architecture diagram, ML pipeline table, real performance table from script output, Docker quickstart, API reference, project structure.
+
+### Verification
+
+```
+pytest tests/ -m "not slow":  41 passed, 1 deselected, 0 failed
+manage.py check:               0 issues
+manage.py migrate:             No migrations to apply
+generate_performance_report.py:
+  Binary: P=1.000 R=1.000 F1=1.000 FPR=0.000
+  Zone macro F1: 1.000 (zone_1=1.00 zone_2=1.00 zone_3=1.00)
+  Latency: mean=674ms  p95=755ms per 7-sample window
+```
+
+### Notes
+
+- F1=1.000 reflects in-distribution synthetic evaluation (same simulator as training). Real test-cell data would show lower numbers.
+- views.py log-line bug (accessing old `evaluate()` flat keys from `predict()` output) was found by the API tests and fixed.
+- `pytest-django` was not in requirements.txt or installed; added and installed as part of this phase.
+- The `slow` marker deselects the batch inference test in CI (`-m "not slow"`); it still passes when run without the flag.

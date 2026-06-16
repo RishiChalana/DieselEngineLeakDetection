@@ -1,0 +1,17 @@
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "diesel_engine_predictor.settings"
+asyncio_mode = "auto"
+testpaths = ["tests"]
+pythonpath = [".", "backend/diesel_engine_predictor"]
+markers = [
+    "slow: marks tests as slow-running (deselect with '-m not slow')",
+    "integration: marks integration tests requiring Django",
+]
+
+[tool.coverage.run]
+source = ["ml_model", "predict", "session_analysis", "user_auth"]
+omit = ["*/migrations/*", "*/tests/*", "*/settings*"]
+
+[tool.coverage.report]
+show_missing = true
+skip_empty = true
