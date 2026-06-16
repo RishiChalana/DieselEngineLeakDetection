@@ -14,14 +14,17 @@ os.environ.setdefault(
 django.setup()
 
 from predict import routing  # import AFTER setup()
+from predict.token_auth_middleware import TokenAuthMiddleware
 
 django_asgi_app = get_asgi_application()
 
 application = ProtocolTypeRouter({
     "http": django_asgi_app,
     "websocket": AuthMiddlewareStack(
-        URLRouter(
-            routing.websocket_urlpatterns
+        TokenAuthMiddleware(
+            URLRouter(
+                routing.websocket_urlpatterns
+            )
         )
     ),
 })

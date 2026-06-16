@@ -121,6 +121,7 @@ cd DieselEngineLeakDetection
 docker compose up
 # Backend API:  http://localhost:8000
 # Dashboard:    http://localhost:8501
+# Frontend:     open frontend/index.html in Chrome/Safari
 ```
 
 ### Local development
@@ -140,6 +141,10 @@ daphne -p 8000 diesel_engine_predictor.asgi:application
 
 # In another terminal (from project root):
 streamlit run engine_simulator/app.py
+
+# Frontend — no build step required:
+open frontend/index.html          # macOS
+# or double-click frontend/index.html in Finder / Explorer
 ```
 
 ---

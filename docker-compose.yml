@@ -14,6 +14,7 @@ services:
       - PYTHONPATH=/app
     volumes:
       - ./backend/diesel_engine_predictor/db.sqlite3:/app/backend/diesel_engine_predictor/db.sqlite3
+      - ./frontend:/app/frontend
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/user_auth/health/"]
       interval: 30s

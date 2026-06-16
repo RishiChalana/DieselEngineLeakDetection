@@ -52,9 +52,10 @@ DieselEngineLeakDetection/
 ├── tests/                               pytest suite: conftest.py + test_ml_pipeline.py + test_api.py
 ├── scripts/                             validate_zone_isolation.py + generate_performance_report.py
 ├── docs/                                Architecture, ML decisions, API reference, phase log, MODEL_PERFORMANCE.md
+├── frontend/index.html                  Self-contained browser UI (login → WebSocket session)
 ├── Dockerfile                           Backend ASGI image
 ├── Dockerfile.streamlit                 Dashboard image
-├── docker-compose.yml                   Backend + dashboard services
+├── docker-compose.yml                   Backend + dashboard services (frontend volume mounted)
 ├── pyproject.toml                       pytest + coverage config
 ├── engine_calibration.pkl               Stability limits + calibrated threshold (in backend root)
 └── .env.example                         Copy to backend/diesel_engine_predictor/.env
@@ -153,7 +154,7 @@ Full details in `docs/ARCHITECTURE.md` and `docs/ML_DECISIONS.md`.
 
 ## WebSocket Quick Reference
 
-**Connect:** `ws://localhost:8000/ws/engine/` with `Authorization: Token <token>`
+**Connect:** `ws://localhost:8000/ws/engine/?token=<token>` (query param — browser WebSocket API cannot send Authorization header; `TokenAuthMiddleware` in `predict/token_auth_middleware.py` resolves the token and sets `scope["user"]`; placed INSIDE `AuthMiddlewareStack` so it overrides the anonymous session user)
 
 **Message 1 (required):** `{"model_no": "CAT-3412-001", "engine_type": "diesel"}`
 
@@ -216,11 +217,30 @@ Full protocol in `docs/API_REFERENCE.md`.
 5. **`Dockerfile` + `Dockerfile.streamlit` + `docker-compose.yml`** — both services containerised.
 6. **`README.md`** — portfolio-ready with Mermaid architecture diagram, real performance numbers, Docker quickstart.
 
+## Frontend (Complete)
+
+`frontend/index.html` — single self-contained HTML+CSS+JS file, no build step.
+
+- Login / Sign-up → DRF token → `ws://…/ws/engine/?token=<tok>` (query-param auth via `TokenAuthMiddleware`)
+- JS sensor generator with real baseline values; toggle between healthy / charge-air / exhaust / pre-compressor leak injection at severity 0.40
+- Canvas 2D rolling z_cumulative chart (60 points, threshold line, green/red dot coloring)
+- 6 subsystem z-score breakdown cards (boost/dpf/maf/exhaust/mahal/svm)
+- FLAG badge (PASS / WARNING / FAIL / CRITICAL) + steady-state indicator + confidence bar
+- Zone confidence bars with `recommended action` when leak confirmed
+- Scrolling event log (cadence-gated `window_result` messages + all state transitions)
+
+### 8. TokenAuthMiddleware (`predict/token_auth_middleware.py`)
+
+Browser WebSocket API cannot send `Authorization: Token` header during the HTTP upgrade request. The middleware reads `?token=<key>` from the WebSocket URL query string, resolves the DRF `Token` model async, and sets `scope["user"]`. Placed inside `AuthMiddlewareStack` in `asgi.py` so it overrides the anonymous session user without breaking session-cookie auth for other clients.
+
+### 9. CORS (django-cors-headers)
+
+Added `corsheaders` to `INSTALLED_APPS` + `CorsMiddleware` at the top of `MIDDLEWARE` + `CORS_ALLOW_ALL_ORIGINS = True`. Required for the `file://` frontend to POST to `http://localhost:8000/user_auth/login/` without CORS rejection. Also fixed `ALLOWED_HOSTS` to default to `localhost 127.0.0.1 0.0.0.0 [::1]` via `os.getenv("ALLOWED_HOSTS", ...)` so Docker with `DEBUG=false` doesn't reject all requests.
+
 ## If Continuing
 
 - Redis channel layer for production multi-worker WebSocket deployment.
 - Real test-cell data validation of zone classifier physics discriminators.
-- Frontend (`frontend/.gitkeep` → real UI).
 
 ---
 

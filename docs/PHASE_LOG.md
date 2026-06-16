@@ -343,3 +343,37 @@ generate_performance_report.py:
 - views.py log-line bug (accessing old `evaluate()` flat keys from `predict()` output) was found by the API tests and fixed.
 - `pytest-django` was not in requirements.txt or installed; added and installed as part of this phase.
 - The `slow` marker deselects the batch inference test in CI (`-m "not slow"`); it still passes when run without the flag.
+
+---
+
+## Frontend — Browser UI (2026-06-16)
+
+**Status:** Complete
+
+### What was built
+
+- `frontend/index.html` — single self-contained file; no build step, no npm, no external CDN. Open directly in Chrome/Safari.
+- Login form + Sign-up form → POST `/user_auth/login/` or `/user_auth/signup/` → DRF token stored in JS state.
+- WebSocket session: `ws://localhost:8000/ws/engine/?token=<tok>` — query-param token auth because browser WebSocket API cannot send the `Authorization` header.
+- `predict/token_auth_middleware.py` — `TokenAuthMiddleware` reads `?token=` from the WS URL query string, resolves `rest_framework.authtoken.Token` async, and writes `scope["user"]`. Placed inside `AuthMiddlewareStack` in `asgi.py` so it overrides the anonymous session user without breaking cookie-based auth.
+- JS sensor generator: baselines from `_VALID_PAYLOAD` (healthy sample known to pass the API), noise σ values tuned below stability-gate limits (σ_rpm=10 << limit=30.5, σ_fuel=1 << 3.37, σ_boost=0.008 << 0.036). Three leak modes (charge_air/exhaust/precompressor) apply severity-0.40 multipliers from `engine_simulator_core.py`.
+- Canvas 2D chart: 60-point rolling window, threshold dashed line at 6.3156, green/red segment coloring by `is_leak` status, HiDPI-aware (devicePixelRatio scaling).
+- 6 subsystem z-score cards (boost/dpf/maf/exhaust/mahalanobis/svm) with `zColor()` threshold-relative coloring.
+- FLAG badge (PASS/WARNING/FAIL/CRITICAL/BUFFERING/UNSTABLE) with CSS animation on CRITICAL.
+- Zone confidence bars with active-zone highlight and `RECOMMENDED_ACTIONS` text box.
+- Scrolling event log (250-line cap, color-coded by severity).
+- Backend probe on page load via `GET /user_auth/health/` — shows connection dot in header.
+- Connection panel auto-collapses after engine registration to give screen space to live data.
+
+### Related changes
+
+- `settings.py` — added `corsheaders` + `CORS_ALLOW_ALL_ORIGINS = True` so `file://` origin can POST to `localhost:8000` without CORS rejection. Also fixed `ALLOWED_HOSTS` to default to `localhost 127.0.0.1 0.0.0.0 [::1]` (was `[]` which breaks Docker with `DEBUG=false`).
+- `requirements.txt` — added `django-cors-headers`.
+- `asgi.py` — added `TokenAuthMiddleware` import and wired inside `AuthMiddlewareStack`.
+- `docker-compose.yml` — added `./frontend:/app/frontend` volume mount to backend service.
+- `README.md` — added `open frontend/index.html` to the quickstart.
+
+### Notes
+
+- The stability buffer fills with 7 samples before inference starts; the log shows `buffering 1/7 … 7/7`. After switching to leak mode, 1–2 `unstable` messages are expected while the buffer flushes the mode-change transient, then detection resumes.
+- `CORS_ALLOW_ALL_ORIGINS = True` is development-only. For production, restrict to specific origins via `CORS_ALLOWED_ORIGINS`.
