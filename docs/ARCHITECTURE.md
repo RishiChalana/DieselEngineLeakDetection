@@ -43,6 +43,8 @@ DieselEngineLeakDetection/
 │   │   ├── kalman_filter.py                  2D state-space (position + velocity) per channel
 │   │   ├── kalman_layer.py                   12 independent KalmanFilter2D instances; .filter(dict)
 │   │   └── kalman_tuning.py                  Offline script: estimates Q and R from healthy CSV
+│   ├── steady_state.py                       SteadyStateDetector: CV-based transient gate
+│   ├── zone_classifier.py                    ZoneClassifier: weighted AE z-score zone voting + physics checks
 │   └── models/
 │       ├── model_stack.py                    Singleton: loads all artifacts, exposes predict() + evaluate()
 │       ├── autoencoders/
@@ -89,6 +91,12 @@ DieselEngineLeakDetection/
 └───────────────────────┬─────────────────────────────────┘
                         │  raw float values (one sample per tick)
                         ▼
+              ┌──────────────────────┐
+              │  SteadyStateDetector │  CV check on rpm/fuel/MAF/boost
+              │  (steady_state.py)   │  ── UNSTABLE? → skip inference
+              └────────┬─────────────┘
+                       │  steady-state confirmed
+                        ▼
               ┌──────────────────┐
               │  KalmanLayer     │  12 independent 2D filters
               │  (kalman_layer)  │  removes measurement noise
@@ -118,15 +126,23 @@ DieselEngineLeakDetection/
                          │    + 0.3·z_mahal²       │
                          │    + z_svm²)            │
                          └───────────┬────────────┘
-                                     │  z_cumulative (float)
+                                     │  z_cumulative ≥ ANOMALY_THRESHOLD?
+                                     ▼
+                         ┌───────────────────────┐
+                         │  ZoneClassifier       │  only when is_leak=True
+                         │  (zone_classifier.py) │  weighted AE z-score voting
+                         │  + physics checks     │  + mass balance / pressure ratio
+                         └───────────┬───────────┘
+                                     │  detected_zone, zone_scores, evidence
                     ┌────────────────┴─────────────────────┐
                     │                                       │
                     ▼                                       ▼
        ┌────────────────────────┐           ┌──────────────────────────┐
        │  WebSocket Consumer    │           │  REST POST /api/predict  │
-       │  7-sample window vote  │           │  immediate response       │
-       │  2-window confirmation │           └──────────────────────────┘
-       │  → test_complete msg   │
+       │  7-sample window vote  │           │  5-section verdict dict  │
+       │  2-window confirmation │           │  (steady/detect/isolate/ │
+       │  → enriched            │           │   decision/metadata)     │
+       │    window_result msg   │           └──────────────────────────┘
        └────────────────────────┘
 ```
 
@@ -322,15 +338,15 @@ Full documentation: see `docs/API_REFERENCE.md`.
 
 ## 9. Known Limitations
 
-1. **MAF autoencoder feature mismatch:** Trained on `[rpm, fuel_rate, MAP, MAF, turbo_speed]` but served with `[rpm, fuel_rate, MAP, IAT, MAF]`. The scaler treats position 5 as `turbo_speed` but receives `IAT` at inference time. This does not crash (both channels are in-range floats) but produces incorrect anomaly scores for the MAF subsystem.
+1. ~~**MAF autoencoder feature mismatch**~~ — **Fixed in Phase 3**: `AE_FEATURES["maf"]` corrected to `["rpm","fuel_rate","MAP","MAF","turbo_speed"]`. Healthy maf_z dropped from 5.8σ to 0.02σ.
 
-2. **Three different anomaly thresholds:** consumer.py uses 6.3156 (from calibration pkl), ModelStack uses 3.5, and the Streamlit app uses 3.0. These are not aligned and produce different `is_leak` verdicts for the same sample.
+2. ~~**Three different anomaly thresholds**~~ — **Fixed in Phase 3**: `ANOMALY_THRESHOLD = 6.3156` loaded from `engine_calibration.pkl` at import time. All decision paths use this single value.
 
 3. **In-memory channel layer:** The current `CHANNEL_LAYERS` config uses `InMemoryChannelLayer`, which does not support multi-worker deployments. Replacing with Redis is required for production.
 
 4. **No HTTPS/WSS enforcement:** `ALLOWED_HOSTS = []` and `ssl_require` removed. Production deployment needs proper SSL termination.
 
-5. **User history field unpopulated:** The `history` JSONField on the User model is never written to. The original design intended to log test results per user there, but this logic was not implemented.
+5. ~~**User history field unpopulated**~~ — **Fixed in Phase 3**: `update_user_history()` in `test_service.py` appends `{timestamp, engine_model_no, leak_detected, confidence}` after each test, bounded to 50 entries.
 
 6. **Synthetic training data only:** All 40,000 training samples come from the physics-based digital twin. Models have not been validated on real test-cell sensor data.
 

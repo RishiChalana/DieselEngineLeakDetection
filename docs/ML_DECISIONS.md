@@ -118,10 +118,72 @@ Requiring 2 consecutive leaky windows before declaring `LEAK_CONFIRMED` further 
 
 ## 9. What would you change if you had 6 more months?
 
-1. **Fix the MAF AE feature mismatch** — retrain `nn_model_maf.py` with the inference feature set or fix the inference code to use the training feature set.
-2. **Unify the three anomaly thresholds** — single source of truth in constants.py, loaded into all consumers.
+Items 1 and 2 are now resolved in Phase 3 (see §10).
+
+1. ~~**Fix the MAF AE feature mismatch**~~ — **Fixed in Phase 3**: inference now uses `[rpm, fuel_rate, MAP, MAF, turbo_speed]`, matching the training feature set.
+2. ~~**Unify the three anomaly thresholds**~~ — **Fixed in Phase 3**: `ANOMALY_THRESHOLD` loaded from `engine_calibration.pkl`; old `CONSUMER_ANOMALY_THRESHOLD` and `MODEL_STACK_ANOMALY_THRESHOLD` removed.
 3. **Validate on real test-cell data** — collect at minimum 10,000 healthy samples and 5 known-leak sessions from real CAT hardware.
 4. **Online calibration** — update the Kalman Q/R parameters and the SVM boundary incrementally as new healthy data arrives from deployed test cells.
 5. **Add a time-series model (TCN or LSTM) as a 7th component** — autoencoders are stateless per-sample. A temporal model could detect the *rate of change* of sensor correlations, which is an early-warning signal before threshold crossing.
 6. **Replace in-memory channel layer with Redis** — prerequisite for multi-worker WebSocket deployment.
 7. **Frontend** — currently the entire frontend directory is a `.gitkeep`.
+
+---
+
+## 10. Phase 3 correctness fixes and new components (why)
+
+### 10a. Why the MAF AE was producing wrong scores (and how it was fixed)
+
+The MAF autoencoder training script (`nn_model_maf.py`) selected features in the order `["rpm", "fuel_rate", "MAP", "MAF", "turbo_speed"]` and fit a `StandardScaler` on that data. The scaler stored the mean and variance of each position independently; position 4 was fit on `turbo_speed` values (range: 30 000–150 000 rpm).
+
+At inference, `AE_FEATURES["maf"]` was set to `["rpm", "fuel_rate", "MAP", "IAT", "MAF"]`. This put `IAT` (~300 K) at position 3 and `MAF` at position 4. The scaler applied `turbo_speed` statistics to `IAT` values at position 3, producing a normalized value of roughly `(300 - 90 000) / 30 000 ≈ -3`. This extreme out-of-range value propagated through the autoencoder and produced reconstruction errors around 5–6σ even for perfectly healthy samples. The fix was purely a constant change — correcting `AE_FEATURES["maf"]` to match the training order. No retraining required.
+
+### 10b. Why we unified three anomaly thresholds to one
+
+Three values (6.3156, 3.5, 3.0) existed for historical reasons: the consumer was calibrated from the leaky z-score distribution; the ModelStack threshold was hand-tuned for Streamlit visual sensitivity; the Streamlit display threshold was an arbitrary visual cutoff. This caused the REST endpoint to disagree with the WebSocket consumer on the same sample (z=5.0 would be `is_leak=True` in REST, but not in consumer).
+
+The fix: `ANOMALY_THRESHOLD = 6.3156` loaded from `engine_calibration.pkl` (mean+3σ of leaky scores) is the single decision gate everywhere. The old 3.0 value is preserved as `DISPLAY_COLOR_SCALE_MAX`, explicitly documented as a display-only constant with no bearing on decisions.
+
+### 10c. Why zone isolation uses weighted subsystem z-score voting
+
+Detection tells you *that* a leak exists; isolation tells you *where*. The four autoencoders are already domain-aligned (boost/dpf/maf/exhaust map directly to the four engine zones). Zone isolation is therefore a natural extension: weight each AE's z-score by how much physical relevance that subsystem has to each zone.
+
+**Zone 1 (pre-compressor):** A leak before the compressor reduces mass airflow without affecting boost. `maf_z` fires; `boost_z` stays low. Weight: `zone_1 ← maf:1.0, boost:0.2`.
+
+**Zone 2 (charge-air):** A leak between compressor and intake manifold reduces boost without reducing MAF (MAF sensor is upstream). `boost_z` fires; `maf_z` stays low. Weight: `zone_2 ← boost:1.0, maf:0.2`.
+
+**Zone 3 (exhaust):** EGT anomaly, exhaust backpressure changes, DPF delta changes. `exhaust_z` and `dpf_z` fire. Weight: `zone_3 ← exhaust:1.0, dpf:0.8`.
+
+**Zone 4 (test cell ducting):** Diffuse anomaly that doesn't align clearly with any single subsystem. Scores are spread across all zones; zone 4 scores non-zero contributions from all four AEs equally, making it the winner when nothing dominates.
+
+This approach requires zero additional ML training — it uses scores we already compute.
+
+### 10d. Why physics checks validate rather than replace ML
+
+ML zone voting answers "which zone's sensors are most anomalous?" Physics checks answer "does the cross-channel relationship still make sense?" These are complementary questions.
+
+The mass balance check (AFR = MAF/fuel_rate) catches cases where the ML zone vote is correct but the contamination mechanism is ambiguous. The pressure ratio check (MAP/ambient) is a diagnostic for charge-air circuit integrity that cannot be easily captured by a single AE's reconstruction error.
+
+Physics checks are deliberately conservative: they only *override* the ML zone under one specific rule (zone_1 with MAP/ambient anomaly → upgrade to zone_2). In all other cases they add to the `notes` field without changing the verdict. This avoids replacing a well-calibrated ML signal with a coarser physics rule.
+
+**Limitation:** Both physics checks use approximate thresholds (AFR 15–90, pressure ratio 1.1–2.5). Real diesel engines operating at different load points or altitudes may require per-engine calibration of these bands.
+
+### 10e. Why steady-state gating prevents false positives during transients
+
+An engine acceleration event (e.g. +200 rpm in 2 seconds) produces sensor changes that look structurally similar to a charge-air leak: boost_pressure temporarily drops relative to MAP, MAF increases faster than boost responds (due to turbo lag), EGT spikes. A leak detector without steady-state gating would fire during every load step.
+
+The CV-based gate is effective because steady-state operation has low within-window variation (CV < 1% for RPM), while transients have high variation. The threshold values were set to match the calibration data spread and can be tuned per engine via `SteadyStateDetector.from_config()`.
+
+**Limitation:** The current gate only checks RPM, fuel_rate, MAF, and boost_pressure. A slow drift (e.g. a coolant temperature effect on IAT over minutes) would pass the gate. Long-term trend detection would require a larger window or a dedicated drift detector.
+
+### 10f. Honest limitations of the zone classifier
+
+1. **No training data for zone scoring.** Zone weights in `ZONE_AE_WEIGHTS` are physics-derived, not data-driven. We have no labelled examples of "this test resulted in a zone_1 leak" to validate the weights against.
+
+2. **Zone 4 (test-cell ducting) is speculative.** The signature is defined negatively ("none of the other zones dominated") rather than from a positive physical model. This is the weakest zone definition.
+
+3. **Multiple-zone reporting is conservative.** When two zones are within 15% of each other, we report "multiple" rather than committing to one. This reduces false precision but may frustrate operators who want a single answer.
+
+4. **Validated only on synthetic data.** The EngineSimulator generates precompressor/charge_air/exhaust leaks; it does not generate zone_4 (test cell ducting) scenarios. Zone 4 detection has no synthetic validation path.
+
+5. **Per-sample analysis.** Zone classification runs on one sample at a time inside `predict()`. The consumer averages subsystem z-scores across a window, which is more robust but not the same as running the full verdict chain on each sample.

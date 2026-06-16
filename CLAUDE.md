@@ -29,6 +29,10 @@ DieselEngineLeakDetection/
 │   │       ├── pipeline.py              Core ML inference (sys.path MUST be at top)
 │   │       ├── kalman_service.py        KalmanLayer wrapper
 │   │       └── test_service.py          ORM helpers (get_or_create_engine, save_engine_test)
+│   ├── session_analysis/
+│   │   ├── views.py                     POST /api/session/ — batch CSV → Go/No-Go report
+│   │   ├── report_generator.py          SessionReportGenerator (pure Python, no Django)
+│   │   └── urls.py                      session/ → AnalyzeSessionView
 │   └── user_auth/
 │       ├── models.py                    User, Engine, Sensor_Leaky_Data, Engine_Test
 │       ├── views.py                     Signup, Login, Logout, Delete_Account
@@ -36,6 +40,8 @@ DieselEngineLeakDetection/
 ├── ml_model/
 │   ├── data_gen/engine_simulator_core.py  EngineSimulator (3 leak types)
 │   ├── kalman/kalman_layer.py             KalmanLayer (12 channels)
+│   ├── steady_state.py                    SteadyStateDetector (CV-based transient gate)
+│   ├── zone_classifier.py                 ZoneClassifier (weighted AE z-score voting + physics)
 │   └── models/
 │       ├── model_stack.py               Singleton: loads all artifacts; predict()/evaluate()/health_check()
 │       ├── autoencoders/residual_score/encoded_model/  *.keras + *_preprocessing_*.pkl
@@ -108,32 +114,34 @@ The original Signup view called `make_password(data['password'])` before passing
 | 0 | Complete | ML models trained, Django scaffolded, digital twin, datasets generated |
 | 1 | Complete | All 6 critical blockers fixed, Daphne path bug fixed, migrations repaired |
 | 2 | Complete | `/api/predict` view, `config/constants.py`, tests skeleton, full docs |
-| 3 | Not started | Implement test stubs, fix MAF AE mismatch, unify thresholds, frontend |
+| 3 | Complete | MAF AE fix, threshold unification, User.history, SteadyStateDetector, ZoneClassifier, predict() verdict |
+| 4 | Complete | Zone isolation diagnostic, physics override fixes (turbo/boost discriminators), consumer escalation cadence, session_analysis app (POST /api/session/), SessionReportGenerator, Streamlit 4-tab dashboard overhaul |
 
 ---
 
-## ML Pipeline in 6 Lines
+## ML Pipeline in 8 Lines
 
-1. 12 sensor channels → KalmanLayer (per-channel noise smoothing).
-2. Smoothed channels → 4 autoencoders (boost/dpf/maf/exhaust; per-subsystem reconstruction error z-scores).
-3. All 12 channels → One-Class SVM (multivariate outlier z-score).
-4. All 12 channels → Mahalanobis distance (covariance-aware z-score).
-5. Fusion: `z_cumulative = √(z_boost² + z_dpf² + z_maf² + z_exhaust² + 0.3·z_mahal² + z_svm²)`.
-6. Decision: z_cumulative ≥ threshold → anomalous sample. 4/7 samples anomalous → leaky window. 2 consecutive leaky windows → `LEAK_CONFIRMED`.
+1. **Steady-state gate:** CV check (rpm, fuel_rate, MAF, boost_pressure) — skip if engine not stable.
+2. 12 sensor channels → KalmanLayer (per-channel noise smoothing).
+3. Smoothed channels → 4 autoencoders (boost/dpf/maf/exhaust; per-subsystem reconstruction error z-scores).
+4. All 12 channels → One-Class SVM (multivariate outlier z-score).
+5. All 12 channels → Mahalanobis distance (covariance-aware z-score).
+6. Fusion: `z_cumulative = √(z_boost² + z_dpf² + z_maf² + z_exhaust² + 0.3·z_mahal² + z_svm²)`.
+7. Decision: z_cumulative ≥ `ANOMALY_THRESHOLD` → anomalous sample. 4/7 samples anomalous → leaky window. 2 consecutive leaky windows → `LEAK_CONFIRMED`.
+8. **Zone isolation:** ZoneClassifier uses weighted AE z-scores + physics checks to localise leak to zone_1/zone_2/zone_3/zone_4.
 
 Full details in `docs/ARCHITECTURE.md` and `docs/ML_DECISIONS.md`.
 
 ---
 
-## Anomaly Threshold Map (3 values — intentional)
+## Anomaly Threshold (single source of truth — Phase 3)
 
 | Constant | Value | Used where | Derivation |
 |----------|-------|-----------|-----------|
-| `CONSUMER_ANOMALY_THRESHOLD` | 6.3156 | WebSocket consumer window vote | engine_calibration.pkl: mean+3σ of leaky z-scores |
-| `MODEL_STACK_ANOMALY_THRESHOLD` | 3.5 | ModelStack.evaluate() `is_leak` field | Empirically tuned for Streamlit sensitivity |
-| `STREAMLIT_DISPLAY_THRESHOLD` | 3.0 | Streamlit dashboard color indicator | Matches live-display visual range |
+| `ANOMALY_THRESHOLD` | 6.3156 | ALL is_leak decisions (REST, WebSocket, ModelStack) | engine_calibration.pkl: mean+3σ of leaky z-scores |
+| `DISPLAY_COLOR_SCALE_MAX` | 3.0 | Streamlit chart colour scale only | NOT a decision threshold |
 
-These are not aligned. A sample can be `is_leak=True` from ModelStack (≥3.5) but not count as a leaky vote in the consumer (needs ≥6.3156). Phase 3 should unify them if a consistent truth source is needed.
+`ANOMALY_THRESHOLD` is loaded from `engine_calibration.pkl` at `config/constants.py` import time. All three consumers import the same constant — no more threshold disagreement.
 
 ---
 
@@ -150,7 +158,8 @@ These are not aligned. A sample can be `is_leak=True` from ModelStack (≥3.5) b
 - `buffering` → first 7 samples (stability buffer filling)
 - `unstable` → stability check failed
 - `sample_result` → after each scored sample (z_scores dict, confidence, status)
-- `window_result` → after every 7 samples (vote result)
+- `window_result` → cadence-gated: PASS every 10 windows, WARNING every 3, FAIL every window
+- `critical_alert` → when `consecutive_fail_count ≥ CONSECUTIVE_FAIL_ALERT_THRESHOLD` (5)
 - `test_complete` → leak confirmed or session timeout
 
 Full protocol in `docs/API_REFERENCE.md`.
@@ -165,30 +174,38 @@ Full protocol in `docs/API_REFERENCE.md`.
 | POST | `/user_auth/login/` | No | Authenticate; returns `{"token": "..."}` |
 | POST | `/user_auth/logout/` | Token | Invalidate token |
 | DELETE | `/user_auth/delete_account/` | Token | Delete user |
-| POST | `/api/predict` | Token | Single-shot inference; returns 14-key result dict |
+| POST | `/api/predict` | Token | Single-shot inference; returns 5-section predict() dict |
+| POST | `/api/session/` | Token | Batch CSV inference; returns Go/No-Go session report |
 
-`/api/predict` required body: all 12 keys from `SENSOR_COLS`. Returns `is_leak`, `confidence`, `z_cumulative`, `boost_z`, `dpf_z`, `maf_z`, `exhaust_z`, `svm_z`, `ae_z`, `z_mahalanobis`, `z_scores` (list of 6), `leak_type`, `final_score`, `physics_score`.
+`/api/predict` required body: all 12 keys from `SENSOR_COLS`. Returns 5-section dict: `steady_state`, `detection`, `isolation`, `decision`, `metadata`.
 
----
-
-## Known Bugs (not yet fixed)
-
-1. **MAF autoencoder feature mismatch:** Trained on `[rpm, fuel_rate, MAP, MAF, turbo_speed]`; served with `[rpm, fuel_rate, MAP, IAT, MAF]`. The scaler was fit on the training set — position 5 is `turbo_speed` in the artifact but receives `IAT` at inference. Scores are subtly wrong. Fix: retrain with the inference feature set.
-
-2. **Threshold misalignment:** Three different `is_leak` thresholds in use (see table above). Inconsistent verdicts between the REST endpoint and WebSocket consumer.
-
-3. **User.history field never written:** The `JSONField` on the User model is always empty. The ORM call to populate it was not implemented.
+`/api/session/` accepts multipart form with `file` (CSV) or raw body (`Content-Type: text/csv`). CSV must have all 12 `SENSOR_COLS` as columns. Returns structured report with `header` (go_nogo), `session_summary`, `leak_analysis`, `recommendation`, `data_summary`.
 
 ---
 
-## What Phase 3 Must Build
+## Known Bugs / Open Issues
 
-1. Implement real assertions in `tests/test_ml_pipeline.py` (currently all `pass`).
-2. Retrain MAF autoencoder with correct feature set or fix inference code.
-3. Single `ANOMALY_THRESHOLD` loaded from `engine_calibration.pkl` at runtime — replace all three separate constants with one source of truth.
-4. `pytest.ini` or `pyproject.toml` with `DJANGO_SETTINGS_MODULE`, `asyncio_mode = auto`, test paths.
-5. Redis channel layer for production WebSocket support (replace `InMemoryChannelLayer`).
-6. Frontend (currently `frontend/.gitkeep`).
+1. **Zone 4 (test-cell ducting) has no synthetic validation path.** ZoneClassifier will classify to zone_4 only when no other zone dominates; we have no ground-truth test cases for this.
+
+2. **Zone weights are physics-derived, not data-fitted.** `ZONE_AE_WEIGHTS` in constants.py was set by physical reasoning. The turbo/boost physics overrides (`_boost_below_expected`, `_turbo_above_expected`) were validated against the synthetic simulator. Real CAT data cross-validation needed before production.
+
+3. **precompressor zone classification is 65% reliable** at severity 0.40. The cascade from MAF reduction fires all AEs roughly equally, making the ML weighted vote ambiguous ("multiple"). The turbo-above-expected physics override rescues 65%+ of cases. At lower severities (< 0.20), detection may succeed but zone_1 isolation may degrade.
+
+4. **SteadyStateDetector runs per-sample** inside `predict()`. Consumer uses a window which is more robust; REST single-shot uses only one sample.
+
+5. **Test stubs not implemented** — `tests/test_ml_pipeline.py` has `pass` in all test bodies.
+
+6. **InMemoryChannelLayer** still in use — not suitable for multi-worker WebSocket deployment.
+
+---
+
+## What Phase 5 Must Build
+
+1. **Implement test stubs** in `tests/test_ml_pipeline.py` with real assertions.
+2. **`pytest.ini`** with `DJANGO_SETTINGS_MODULE`, `asyncio_mode = auto`, test paths.
+3. **Redis channel layer** — replace `InMemoryChannelLayer` for production.
+4. **Frontend** (`frontend/.gitkeep` → real UI).
+5. **Validate zone classifier on real test-cell data** — the turbo/boost physics overrides were derived from the synthetic simulator's equations; real hardware may have different turbo response curves.
 
 ---
 

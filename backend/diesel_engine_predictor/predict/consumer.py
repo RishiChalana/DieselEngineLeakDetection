@@ -28,17 +28,26 @@ if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
 from config.constants import (
-    CONSUMER_ANOMALY_THRESHOLD,
+    ANOMALY_THRESHOLD,
     CONFIRMATION_WINDOWS_REQUIRED,
+    CONSECUTIVE_FAIL_ALERT_THRESHOLD,
     INFERENCE_WINDOW_SIZE,
+    SEND_INTERVAL_FAIL,
+    SEND_INTERVAL_PASS,
+    SEND_INTERVAL_WARNING,
     STABILITY_WINDOW_SIZE,
     WS_SESSION_TIMEOUT_SECONDS,
     WINDOW_ANOMALY_VOTE_THRESHOLD,
     CALIBRATION_FILENAME,
     Z_SCORE_EPSILON,
 )
+from ml_model.zone_classifier import ZoneClassifier
+from ml_model.steady_state import SteadyStateDetector
 from .services.pipeline import process_engine_data
-from .services.test_service import get_or_create_engine, save_engine_test
+from .services.test_service import get_or_create_engine, save_engine_test, update_user_history
+
+_zone_classifier = ZoneClassifier()
+_steady_detector = SteadyStateDetector()
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +84,7 @@ class EngineConsumer(AsyncWebsocketConsumer):
         self.current_window: list = []
         self.confirmed_windows: int = 0
         self.window_count: int = 0
+        self.consecutive_fail_count: int = 0
 
         logger.info("WebSocket connected — user=%s", user.username)
 
@@ -161,9 +171,10 @@ class EngineConsumer(AsyncWebsocketConsumer):
         # ML inference
         result = process_engine_data(data)
         z_cumulative: float = result["z_cumulative"]
-        is_leak_sample: bool = z_cumulative > CONSUMER_ANOMALY_THRESHOLD
+        self._last_z_cumulative: float = z_cumulative
+        is_leak_sample: bool = z_cumulative >= ANOMALY_THRESHOLD
         confidence: float = round(
-            min(z_cumulative / max(CONSUMER_ANOMALY_THRESHOLD * 2, Z_SCORE_EPSILON), 1.0),
+            min(z_cumulative / max(ANOMALY_THRESHOLD * 2, Z_SCORE_EPSILON), 1.0),
             4,
         )
 
@@ -172,7 +183,15 @@ class EngineConsumer(AsyncWebsocketConsumer):
             "fuel_rate": data["fuel_rate"],
             "boost_pressure": data["boost_pressure"],
             "z_cumulative": z_cumulative,
+            # Store subsystem z-scores for zone classification at window boundary.
+            "_subsystem_z": {
+                "boost":   result["z_autoencoder_boost"],
+                "dpf":     result["z_autoencoder_dpf"],
+                "maf":     result["z_autoencoder_maf"],
+                "exhaust": result["z_autoencoder_exhaust"],
+            },
         })
+        self._last_raw_sample: Dict[str, Any] = data
 
         await self.send(text_data=json.dumps({
             "type": "sample_result",
@@ -195,9 +214,9 @@ class EngineConsumer(AsyncWebsocketConsumer):
             await self._evaluate_window()
 
     async def _evaluate_window(self) -> None:
-        """Vote on the completed window and check for leak confirmation."""
+        """Vote on the completed window, classify zone, and check for leak confirmation."""
         anomaly_count: int = sum(
-            s["z_cumulative"] > CONSUMER_ANOMALY_THRESHOLD
+            s["z_cumulative"] >= ANOMALY_THRESHOLD
             for s in self.current_window
         )
         window_leak: bool = anomaly_count >= WINDOW_ANOMALY_VOTE_THRESHOLD
@@ -207,25 +226,102 @@ class EngineConsumer(AsyncWebsocketConsumer):
         else:
             self.confirmed_windows = 0
 
+        # Zone isolation: average subsystem z-scores across the anomalous samples.
+        isolation_payload: Dict[str, Any] = {}
+        is_steady = _steady_detector.check(
+            [s for s in self.current_window]
+        )["is_steady"]
+
+        if window_leak:
+            anomalous = [s for s in self.current_window if s["z_cumulative"] >= ANOMALY_THRESHOLD]
+            avg_subsystem_z = {
+                sub: float(np.mean([s["_subsystem_z"][sub] for s in anomalous]))
+                for sub in ("boost", "dpf", "maf", "exhaust")
+            }
+            raw_ref = getattr(self, "_last_raw_sample", {})
+            iso = _zone_classifier.analyze(avg_subsystem_z, {}, raw_ref)
+            isolation_payload = {
+                "zone":             iso["detected_zone"],
+                "zone_label":       iso["zone_label"],
+                "top_evidence":     iso["supporting_evidence"][:2],
+                "zone_scores":      iso["zone_scores"],
+            }
+
+        # Confidence from average z of anomalous window samples
+        avg_z = float(np.mean([s["z_cumulative"] for s in self.current_window]))
+        window_confidence = round(
+            min(avg_z / max(ANOMALY_THRESHOLD * 2, Z_SCORE_EPSILON), 1.0), 4
+        )
+        flag = "FAIL" if (window_leak and window_confidence >= 0.6) else (
+            "WARNING" if window_leak else "PASS"
+        )
+        severity = "severe" if window_confidence >= 0.75 and window_leak else (
+            "moderate" if window_leak else "none"
+        )
+
+        # Track consecutive FAIL windows for escalation cadence.
+        if flag == "FAIL":
+            self.consecutive_fail_count += 1
+        else:
+            self.consecutive_fail_count = 0
+
         logger.debug(
-            "Window %d evaluated — anomalous=%d/%d  confirmed_windows=%d",
+            "Window %d evaluated — anomalous=%d/%d  confirmed_windows=%d  flag=%s  "
+            "consecutive_fail=%d",
             self.window_count,
             anomaly_count,
             INFERENCE_WINDOW_SIZE,
             self.confirmed_windows,
+            flag,
+            self.consecutive_fail_count,
         )
 
-        await self.send(text_data=json.dumps({
-            "type": "window_result",
-            "window_index": self.window_count,
-            "window_leak": window_leak,
-            "anomaly_count": anomaly_count,
-            "confirmed_windows": self.confirmed_windows,
-            "leaky_samples_last_window": [
-                s for s in self.current_window
-                if s["z_cumulative"] > CONSUMER_ANOMALY_THRESHOLD
-            ],
-        }))
+        # Cadence gating: suppress window_result messages at PASS/WARNING rates.
+        send_interval = (
+            SEND_INTERVAL_FAIL    if flag == "FAIL"    else
+            SEND_INTERVAL_WARNING if flag == "WARNING" else
+            SEND_INTERVAL_PASS
+        )
+        should_send = (self.window_count % send_interval) == 0
+
+        if should_send:
+            leaky_samples = [
+                {k: v for k, v in s.items() if not k.startswith("_")}
+                for s in self.current_window
+                if s["z_cumulative"] >= ANOMALY_THRESHOLD
+            ]
+            await self.send(text_data=json.dumps({
+                "type": "window_result",
+                "window_index": self.window_count,
+                "window_leak": window_leak,
+                "anomaly_count": anomaly_count,
+                "confirmed_windows": self.confirmed_windows,
+                "leaky_samples_last_window": leaky_samples,
+                "flag":           flag,
+                "severity":       severity,
+                "is_steady_state": is_steady,
+                "escalate":       flag == "FAIL",
+                **isolation_payload,
+            }))
+
+        if self.consecutive_fail_count >= CONSECUTIVE_FAIL_ALERT_THRESHOLD:
+            logger.warning(
+                "Critical alert: %d consecutive FAIL windows — user=%s engine=%s",
+                self.consecutive_fail_count,
+                self.user.username,
+                getattr(self.engine, "model_no", "unknown"),
+            )
+            await self.send(text_data=json.dumps({
+                "type": "critical_alert",
+                "consecutive_fail_windows": self.consecutive_fail_count,
+                "window_index": self.window_count,
+                "severity": severity,
+                "zone": isolation_payload.get("zone", "unknown"),
+                "message": (
+                    f"CRITICAL: {self.consecutive_fail_count} consecutive anomalous windows. "
+                    "Halt test and inspect immediately."
+                ),
+            }))
 
         self.window_count += 1
 
@@ -240,16 +336,30 @@ class EngineConsumer(AsyncWebsocketConsumer):
     # ------------------------------------------------------------------
 
     async def finish_test(self, leak_detected: bool) -> None:
-        """Persist the test result and close the connection.
+        """Persist the test result, update user history, and close the connection.
 
         Args:
             leak_detected: True if the leak confirmation threshold was met.
         """
+        final_confidence: float = round(
+            min(
+                self._last_z_cumulative / max(ANOMALY_THRESHOLD * 2, Z_SCORE_EPSILON),
+                1.0,
+            ),
+            4,
+        ) if hasattr(self, "_last_z_cumulative") else 0.0
+
         await database_sync_to_async(save_engine_test)(
             engine=self.engine,
             user=self.user,
             window_samples=self.current_window,
             leak_detected=leak_detected,
+        )
+        await database_sync_to_async(update_user_history)(
+            user=self.user,
+            engine_model_no=self.engine.model_no,
+            leak_detected=leak_detected,
+            confidence=final_confidence,
         )
         logger.info(
             "Test complete — leak_detected=%s  windows=%d  user=%s",

@@ -1,13 +1,38 @@
-from user_auth.models import Engine, Sensor_Leaky_Data, Engine_Test
+"""
+test_service.py — ORM helpers for persisting engine test results and user history.
+
+All functions are synchronous Django ORM calls; wrap them with
+``database_sync_to_async`` before awaiting inside the WebSocket consumer.
+"""
+import logging
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional
+
 import numpy as np
 
+from user_auth.models import Engine, Engine_Test, Sensor_Leaky_Data
 
-def get_or_create_engine(model_no: str, engine_type: str | None = None):
+logger = logging.getLogger(__name__)
 
+_MAX_HISTORY_ENTRIES: int = 50
+
+
+def get_or_create_engine(model_no: str, engine_type: Optional[str] = None) -> Engine:
+    """Fetch or create an Engine record by model_no.
+
+    Args:
+        model_no: Unique engine model identifier (e.g. "CAT-3412-001").
+        engine_type: Engine fuel type; defaults to "diesel".
+
+    Returns:
+        The Engine ORM instance.
+    """
     engine, created = Engine.objects.get_or_create(
         model_no=model_no,
-        defaults={"type": engine_type or "diesel"}
+        defaults={"type": engine_type or "diesel"},
     )
+    if created:
+        logger.info("Created new engine record — model_no=%s", model_no)
     return engine
 
 
@@ -49,17 +74,68 @@ def generate_next_steps(leak_detected: bool, window_samples: list):
 
     return "Leak pattern detected. Inspect exhaust manifold, turbo system and DPF assembly."
 
-def save_engine_test(engine, user, window_samples, leak_detected):
+def save_engine_test(engine: Engine, user: Any, window_samples: List[Dict], leak_detected: bool) -> Engine_Test:
+    """Persist a completed test run and return the Engine_Test record.
 
+    Args:
+        engine: Engine ORM instance under test.
+        user: User ORM instance who ran the test.
+        window_samples: List of per-sample dicts captured during the test.
+        leak_detected: True when LEAK_CONFIRMED verdict was reached.
 
+    Returns:
+        The newly created Engine_Test ORM instance.
+    """
     sensor_obj = Sensor_Leaky_Data.objects.create(
         rolling_window_data={"samples": window_samples},
-        next_steps=generate_next_steps(leak_detected, window_samples)
+        next_steps=generate_next_steps(leak_detected, window_samples),
     )
-
-    Engine_Test.objects.create(
+    test = Engine_Test.objects.create(
         engine=engine,
         user=user,
         sensor=sensor_obj,
-        test_check="Fail" if leak_detected else "Pass"
+        test_check="Fail" if leak_detected else "Pass",
     )
+    logger.info(
+        "Saved Engine_Test id=%s — engine=%s  result=%s",
+        test.id,
+        engine.model_no,
+        test.test_check,
+    )
+    return test
+
+
+def update_user_history(
+    user: Any,
+    engine_model_no: str,
+    leak_detected: bool,
+    confidence: float,
+) -> None:
+    """Append a summary entry to user.history (bounded to 50 entries).
+
+    Args:
+        user: User ORM instance whose history to update.
+        engine_model_no: The engine model_no string for this test.
+        leak_detected: Final verdict of the test.
+        confidence: Confidence score (0–1) at test completion.
+    """
+    from user_auth.models import User as UserModel
+
+    entry: Dict[str, Any] = {
+        "timestamp": datetime.now(tz=timezone.utc).isoformat(),
+        "engine_model_no": engine_model_no,
+        "leak_detected": leak_detected,
+        "confidence": round(confidence, 4),
+    }
+
+    # history is a JSONField(default=dict); normalise to list on first write.
+    existing: Any = user.history
+    if not isinstance(existing, list):
+        existing = []
+
+    existing.append(entry)
+    if len(existing) > _MAX_HISTORY_ENTRIES:
+        existing = existing[-_MAX_HISTORY_ENTRIES:]
+
+    UserModel.objects.filter(pk=user.pk).update(history=existing)
+    logger.debug("Updated history for user=%s (entries=%d)", user.username, len(existing))

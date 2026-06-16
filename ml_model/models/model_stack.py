@@ -4,14 +4,21 @@ model_stack.py — Singleton wrapper around all trained ML model artifacts.
 Used by engine_simulator/app.py (Streamlit dashboard) and by the REST
 /api/predict view as an alternative entry point.
 
-Two public methods:
-  evaluate(filtered_data)  — takes already Kalman-filtered sensor dict.
-  predict(sensor_data)     — applies internal Kalman filter then evaluates.
+Three public methods:
+  evaluate(filtered_data)  — takes already Kalman-filtered sensor dict;
+                              returns the flat 14-key detection dict.
+  predict(sensor_data)     — applies Kalman, evaluates, then builds the full
+                              five-section structured verdict including
+                              steady-state gate, detection, isolation, decision,
+                              and metadata.
+  health_check()           — returns component loading status.
 
 Loading happens once on first instantiation (singleton pattern via __new__).
 """
+import datetime
 import logging
 import sys
+import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -26,17 +33,22 @@ if str(_PROJECT_ROOT) not in sys.path:
 
 from config.constants import (
     AE_FEATURES,
+    ANOMALY_THRESHOLD,
     AUTOENCODER_MODEL_FILES,
     AUTOENCODER_PREPROCESSING_FILES,
     AUTOENCODER_SUBPATH,
     MAHAL_SUBPATH,
-    MODEL_STACK_ANOMALY_THRESHOLD,
+    RECOMMENDED_ACTIONS,
     SENSOR_COLS,
+    SEVERITY_MINOR_MAX,
+    SEVERITY_MODERATE_MAX,
     SVM_SUBPATH,
     Z_SCORE_EPSILON,
 )
 from ml_model.kalman.kalman_layer import KalmanLayer
 from ml_model.models.mahalanobis.distance import MahalanobisDistance
+from ml_model.steady_state import SteadyStateDetector
+from ml_model.zone_classifier import ZoneClassifier
 
 logger = logging.getLogger(__name__)
 
@@ -221,9 +233,9 @@ class ModelStack:
 
         physics_score: float = max(z_boost, z_maf, z_exhaust, z_dpf)
         ae_z: float          = float(np.mean([z_boost, z_dpf, z_maf, z_exhaust]))
-        is_leak: bool        = z_cumulative > MODEL_STACK_ANOMALY_THRESHOLD
+        is_leak: bool        = z_cumulative >= ANOMALY_THRESHOLD
         confidence: float    = round(
-            min(z_cumulative / max(MODEL_STACK_ANOMALY_THRESHOLD * 2, Z_SCORE_EPSILON), 1.0),
+            min(z_cumulative / max(ANOMALY_THRESHOLD * 2, Z_SCORE_EPSILON), 1.0),
             4,
         )
         leak_type: Optional[str] = (
@@ -250,16 +262,127 @@ class ModelStack:
         }
 
     def predict(self, sensor_data: Dict[str, float]) -> Dict[str, Any]:
-        """Run full pipeline: internal Kalman filter then evaluate.
+        """Run full pipeline: Kalman → detection → steady-state → isolation → verdict.
 
         Args:
             sensor_data: Raw 12-channel sensor dict (pre-Kalman).
 
         Returns:
-            Same dict as ``evaluate()``.
+            Structured dict with five top-level keys: ``steady_state``,
+            ``detection``, ``isolation``, ``decision``, ``metadata``.
+            ``isolation`` is populated only when ``detection.is_leak`` is True.
         """
+        t_start = time.perf_counter()
         filtered = self._kalman.filter(sensor_data)
-        return self.evaluate(filtered)
+        detection = self.evaluate(filtered)
+        steady = self._steady_detector.check([sensor_data])
+        isolation: Dict[str, Any] = {}
+
+        if detection["is_leak"]:
+            subsystem_z = {
+                "boost":   detection["boost_z"],
+                "dpf":     detection["dpf_z"],
+                "maf":     detection["maf_z"],
+                "exhaust": detection["exhaust_z"],
+            }
+            isolation = self._zone_classifier.analyze(subsystem_z, {}, filtered)
+
+        decision = self._build_decision(detection, steady, isolation)
+
+        duration_ms = round((time.perf_counter() - t_start) * 1000, 2)
+        return {
+            "steady_state": {
+                "is_steady":         steady["is_steady"],
+                "confidence":        steady["confidence"],
+                "reason":            steady["reason"],
+                "unstable_channels": steady["unstable_channels"],
+            },
+            "detection": {
+                "is_leak":     detection["is_leak"],
+                "confidence":  detection["confidence"],
+                "z_cumulative": detection["z_cumulative"],
+                "subsystem_z": {
+                    "boost":   detection["boost_z"],
+                    "dpf":     detection["dpf_z"],
+                    "maf":     detection["maf_z"],
+                    "exhaust": detection["exhaust_z"],
+                },
+                "svm_z":        detection["svm_z"],
+                "mahal_z":      detection["z_mahalanobis"],
+                "leak_type":    detection["leak_type"],
+                "physics_score": detection["physics_score"],
+            },
+            "isolation": isolation,
+            "decision":  decision,
+            "metadata": {
+                "analysis_timestamp":  datetime.datetime.now(tz=datetime.timezone.utc).isoformat(),
+                "model_version":       "phase3",
+                "analysis_duration_ms": duration_ms,
+            },
+        }
+
+    # ------------------------------------------------------------------
+    # Lazy-loaded helpers (avoid import-time overhead for callers that
+    # use only evaluate())
+    # ------------------------------------------------------------------
+
+    @property
+    def _steady_detector(self) -> SteadyStateDetector:
+        if not hasattr(self, "__steady_detector"):
+            object.__setattr__(self, "__steady_detector", SteadyStateDetector())
+        return object.__getattribute__(self, "__steady_detector")
+
+    @property
+    def _zone_classifier(self) -> ZoneClassifier:
+        if not hasattr(self, "__zone_classifier"):
+            object.__setattr__(self, "__zone_classifier", ZoneClassifier())
+        return object.__getattribute__(self, "__zone_classifier")
+
+    @staticmethod
+    def _build_decision(
+        detection: Dict[str, Any],
+        steady: Dict[str, Any],
+        isolation: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Build the flag/severity/action decision block.
+
+        Args:
+            detection: Output of evaluate().
+            steady: Output of SteadyStateDetector.check().
+            isolation: Output of ZoneClassifier.analyze() or empty dict.
+
+        Returns:
+            Dict with keys ``flag``, ``severity``, ``recommended_action``,
+            ``escalate_immediately``.
+        """
+        is_leak: bool = detection["is_leak"]
+        confidence: float = detection["confidence"]
+        is_steady: bool = steady["is_steady"]
+        zone: str = isolation.get("detected_zone", "unknown") if isolation else "unknown"
+
+        if not is_leak:
+            flag = "PASS"
+        elif not is_steady or confidence < 0.6:
+            flag = "WARNING"
+        else:
+            flag = "FAIL"
+
+        if not is_leak:
+            severity = "none"
+        elif confidence < SEVERITY_MINOR_MAX:
+            severity = "minor"
+        elif confidence < SEVERITY_MODERATE_MAX or zone in ("unknown", "multiple"):
+            severity = "moderate"
+        else:
+            severity = "severe"
+
+        action = RECOMMENDED_ACTIONS.get(zone, RECOMMENDED_ACTIONS["unknown"])
+        return {
+            "flag":                flag,
+            "severity":            severity,
+            "recommended_action":  action,
+            "escalate_immediately": flag == "FAIL",
+        }
 
     def health_check(self) -> Dict[str, Any]:
         """Return a dict confirming all sub-models are loaded.
