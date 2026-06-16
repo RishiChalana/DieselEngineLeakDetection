@@ -1,4 +1,4 @@
-version: "3.9"
+
 
 services:
   backend:
@@ -11,6 +11,7 @@ services:
       - DATABASE_URL=sqlite:////app/backend/diesel_engine_predictor/db.sqlite3
       - DEBUG=false
       - SECRET_KEY=${SECRET_KEY:-change-this-in-production}
+      - PYTHONPATH=/app
     volumes:
       - ./backend/diesel_engine_predictor/db.sqlite3:/app/backend/diesel_engine_predictor/db.sqlite3
     healthcheck:

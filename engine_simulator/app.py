@@ -255,7 +255,7 @@ with tab_live:
                 y=[_ZONE_DISPLAY[z] for z in _ZONE_ORDER],
                 orientation="h",
                 marker_color=["#4cde8c", "#4cde8c", "#4cde8c", "#4cde8c"],
-                marker_line_color="#ffffff22",
+                marker_line_color="rgba(255,255,255,0.133)",
             ))
             bar_fig.update_layout(
                 template="plotly_dark",
@@ -500,8 +500,10 @@ with tab_info:
         st.error("One or more model components failed to load.")
 
     comps = health.get("components", {})
+    comps = health.get("components", [])
     if comps:
-        rows_h = [{"component": k, "status": ("OK" if v else "FAIL")} for k, v in comps.items()]
+        EXPECTED = ["ae_boost", "ae_dpf", "ae_maf", "ae_exhaust", "svm", "mahalanobis", "kalman"]
+        rows_h = [{"component": c, "status": ("OK" if c in comps else "FAIL")} for c in EXPECTED]
         st.dataframe(pd.DataFrame(rows_h), use_container_width=True, hide_index=True)
 
     st.markdown("#### Anomaly Threshold")
