@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>CAT ENGINE LEAK DETECTION - CRITICAL FAIL</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&amp;family=JetBrains+Mono:wght@400;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "error": "#ffb4ab",
+                        "on-secondary-fixed-variant": "#474746",
+                        "on-tertiary-fixed": "#001f23",
+                        "secondary-fixed": "#e4e2e1",
+                        "on-tertiary-fixed-variant": "#004f56",
+                        "on-surface-variant": "#d1c6ab",
+                        "on-primary-container": "#6f5a00",
+                        "secondary-fixed-dim": "#c8c6c5",
+                        "on-secondary-container": "#b6b5b4",
+                        "secondary": "#c8c6c5",
+                        "outline-variant": "#4d4632",
+                        "on-surface": "#ebe2cf",
+                        "on-secondary-fixed": "#1b1c1c",
+                        "surface-bright": "#3e392c",
+                        "primary-fixed": "#ffe07f",
+                        "inverse-on-surface": "#353024",
+                        "tertiary-container": "#0bebff",
+                        "primary": "#fff1ce",
+                        "tertiary": "#d0f9ff",
+                        "surface-tint": "#edc200",
+                        "on-error": "#690005",
+                        "tertiary-fixed": "#8df2ff",
+                        "surface-dim": "#171309",
+                        "primary-fixed-dim": "#edc200",
+                        "surface-variant": "#393428",
+                        "surface-container-low": "#1f1b10",
+                        "on-primary": "#3c2f00",
+                        "on-primary-fixed-variant": "#564500",
+                        "on-primary-fixed": "#231b00",
+                        "on-background": "#ebe2cf",
+                        "on-error-container": "#ffdad6",
+                        "surface": "#171309",
+                        "surface-container": "#231f14",
+                        "inverse-primary": "#725c00",
+                        "surface-container-lowest": "#110e05",
+                        "primary-container": "#ffd100",
+                        "on-secondary": "#303030",
+                        "surface-container-high": "#2e2a1e",
+                        "error-container": "#93000a",
+                        "background": "#171309",
+                        "on-tertiary": "#00363c",
+                        "tertiary-fixed-dim": "#00dbed",
+                        "surface-container-highest": "#393428",
+                        "outline": "#9a9077",
+                        "secondary-container": "#474746",
+                        "on-tertiary-container": "#006670",
+                        "inverse-surface": "#ebe2cf"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0px",
+                        "lg": "0px",
+                        "xl": "0px",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "margin-mobile": "16px",
+                        "panel-gap": "8px",
+                        "unit": "4px",
+                        "margin-desktop": "32px",
+                        "gutter": "16px"
+                    },
+                    "fontFamily": {
+                        "metric-lg": ["JetBrains Mono"],
+                        "label-caps": ["Inter"],
+                        "headline-md": ["Inter"],
+                        "body-std": ["Inter"],
+                        "body-fixed": ["JetBrains Mono"],
+                        "display-lg": ["Inter"]
+                    },
+                    "fontSize": {
+                        "metric-lg": ["32px", {"lineHeight": "1", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                        "label-caps": ["12px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "700"}],
+                        "headline-md": ["24px", {"lineHeight": "1.2", "fontWeight": "700"}],
+                        "body-std": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                        "body-fixed": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                        "display-lg": ["48px", {"lineHeight": "1.1", "letterSpacing": "-0.02em", "fontWeight": "700"}]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        body {
+            background-color: #0A0A0A;
+            color: #ebe2cf;
+            font-family: 'Inter', sans-serif;
+            overflow: hidden;
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .panel-border {
+            border: 1px solid #2A2A2A;
+        }
+        .fail-glow {
+            animation: fail-pulse 1.5s infinite ease-in-out;
+        }
+        @keyframes fail-pulse {
+            0% { box-shadow: inset 0 0 0px #93000a; }
+            50% { box-shadow: inset 0 0 20px #93000a; }
+            100% { box-shadow: inset 0 0 0px #93000a; }
+        }
+        .critical-text-blink {
+            animation: blink 0.8s infinite step-end;
+        }
+        @keyframes blink {
+            50% { opacity: 0; }
+        }
+        .chart-spike {
+            stroke-dasharray: 1000;
+            stroke-dashoffset: 1000;
+            animation: draw 2s forwards;
+        }
+        @keyframes draw {
+            to { stroke-dashoffset: 0; }
+        }
+    </style>
+</head>
+<body class="h-screen flex flex-col">
+<!-- TopNavBar -->
+<header class="bg-background dark:bg-background text-primary dark:text-primary border-b border-outline dark:border-outline flex justify-between items-center w-full px-margin-desktop h-16 z-50">
+<div class="flex items-center gap-4">
+<span class="font-display-lg text-display-lg font-black text-primary uppercase">CAT ENGINE LEAK DETECTION</span>
+<div class="bg-error px-4 py-1 flex items-center gap-2 critical-text-blink">
+<span class="material-symbols-outlined text-[#0A0A0A] font-bold" style="font-variation-settings: 'FILL' 1;">warning</span>
+<span class="text-[#0A0A0A] font-bold font-label-caps">CRITICAL FAIL</span>
+</div>
+</div>
+<div class="flex items-center gap-6">
+<div class="flex flex-col items-end">
+<span class="font-label-caps text-on-surface-variant">ACTIVE UNIT</span>
+<span class="font-metric-lg text-[20px] text-primary">CAT-3412-001</span>
+</div>
+<div class="flex gap-2">
+<button class="p-2 hover:bg-surface-variant transition-colors active:scale-95 duration-100">
+<span class="material-symbols-outlined">settings</span>
+</button>
+<button class="p-2 hover:bg-surface-variant transition-colors active:scale-95 duration-100">
+<span class="material-symbols-outlined">power_settings_new</span>
+</button>
+</div>
+</div>
+</header>
+<div class="flex flex-1 overflow-hidden">
+<!-- SideNavBar -->
+<aside class="bg-surface dark:bg-surface border-r border-outline dark:border-outline flex flex-col h-full py-panel-gap w-64 shrink-0">
+<div class="px-4 mb-8">
+<h2 class="font-display-lg text-[24px] font-black text-primary">CONTROL PANEL</h2>
+<p class="font-label-caps text-error critical-text-blink">SYSTEM COMPROMISED</p>
+</div>
+<nav class="flex-1">
+<a class="text-on-surface-variant px-4 py-3 flex items-center gap-3 hover:bg-surface-container-high transition-all" href="#">
+<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+<span class="font-label-caps uppercase">DASHBOARD</span>
+</a>
+<a class="bg-primary text-on-primary font-bold px-4 py-3 flex items-center gap-3 active:bg-primary-container" href="#">
+<span class="material-symbols-outlined" data-icon="analytics">analytics</span>
+<span class="font-label-caps uppercase">TELEMETRY</span>
+</a>
+<a class="text-on-surface-variant px-4 py-3 flex items-center gap-3 hover:bg-surface-container-high transition-all" href="#">
+<span class="material-symbols-outlined" data-icon="precision_manufacturing">precision_manufacturing</span>
+<span class="font-label-caps uppercase">DIAGNOSTICS</span>
+</a>
+<a class="text-on-surface-variant px-4 py-3 flex items-center gap-3 hover:bg-surface-container-high transition-all" href="#">
+<span class="material-symbols-outlined" data-icon="history">history</span>
+<span class="font-label-caps uppercase">HISTORY</span>
+</a>
+</nav>
+<div class="px-4 mt-auto">
+<button class="w-full py-4 bg-[#ff3b30] text-white font-bold font-label-caps uppercase hover:brightness-110 active:scale-95 transition-all border-2 border-white/20 shadow-[0_0_15px_rgba(255,59,48,0.5)]">
+                    EMERGENCY STOP
+                </button>
+</div>
+</aside>
+<!-- Main Dashboard Canvas -->
+<main class="flex-1 bg-[#0A0A0A] p-panel-gap overflow-y-auto">
+<div class="grid grid-cols-12 gap-panel-gap auto-rows-fr">
+<!-- Hero Telemetry Metric -->
+<div class="col-span-12 lg:col-span-8 panel-border bg-[#1A1A1A] p-4 flex flex-col fail-glow border-error">
+<div class="flex justify-between items-center border-b border-[#2A2A2A] pb-2 mb-4">
+<span class="font-label-caps text-on-surface-variant">PRESSURE DIFFERENTIAL SENSOR (PDS-04)</span>
+<span class="text-error font-bold font-label-caps">THRESHOLD EXCEEDED</span>
+</div>
+<div class="flex-1 relative min-h-[300px]">
+<svg class="w-full h-full" preserveaspectratio="none" viewbox="0 0 800 300">
+<!-- Grid Lines -->
+<line stroke="#4d4632" stroke-dasharray="4" stroke-width="1" x1="0" x2="800" y1="200" y2="200"></line>
+<text class="font-body-fixed text-[10px]" fill="#9a9077" x="5" y="195">REDLINE THRESHOLD</text>
+<!-- Failed State Spike Chart -->
+<path class="chart-spike" d="M0,250 L100,240 L200,260 L300,230 L400,245 L500,20 L550,40 L600,10 L700,50 L800,30" fill="none" stroke="#ff3b30" stroke-width="3"></path>
+<!-- Area under curve -->
+<path d="M0,250 L100,240 L200,260 L300,230 L400,245 L500,20 L550,40 L600,10 L700,50 L800,30 L800,300 L0,300 Z" fill="url(#fail-gradient)" opacity="0.2"></path>
+<!-- Critical Dots -->
+<circle class="critical-text-blink" cx="500" cy="20" fill="#ff3b30" r="4"></circle>
+<circle class="critical-text-blink" cx="600" cy="10" fill="#ff3b30" r="4"></circle>
+<defs>
+<lineargradient id="fail-gradient" x1="0" x2="0" y1="0" y2="1">
+<stop offset="0%" stop-color="#ff3b30"></stop>
+<stop offset="100%" stop-color="transparent"></stop>
+</lineargradient>
+</defs>
+</svg>
+<div class="absolute top-4 right-4 text-right">
+<span class="font-metric-lg text-error text-[64px]">842.4</span>
+<span class="font-label-caps text-on-surface-variant block">PSI INJECTION PRESSURE</span>
+</div>
+</div>
+</div>
+<!-- Status Panel -->
+<div class="col-span-12 lg:col-span-4 panel-border bg-[#1A1A1A] p-4 flex flex-col border-[#ff3b30]">
+<div class="flex justify-between items-center border-b border-[#2A2A2A] pb-2 mb-4">
+<span class="font-label-caps text-on-surface-variant">PROTOCOL ADVISORY</span>
+<span class="material-symbols-outlined text-error">gavel</span>
+</div>
+<div class="flex-1 flex flex-col gap-4">
+<div class="p-4 bg-error-container border border-error">
+<h3 class="font-label-caps text-on-error-container mb-2">IMMEDIATE ACTION REQUIRED</h3>
+<p class="font-body-fixed text-[13px] text-white">
+                                Fuel injection simulation shows pressure breach in cylinder group 3. Manual override disabled. Evacuate zone 4B immediately.
+                            </p>
+</div>
+<div class="grid grid-cols-2 gap-2">
+<div class="p-3 bg-[#0D0D0D] border border-[#333333]">
+<span class="font-label-caps text-on-surface-variant text-[10px]">LEAK PROB.</span>
+<span class="block font-metric-lg text-error">99.8%</span>
+</div>
+<div class="p-3 bg-[#0D0D0D] border border-[#333333]">
+<span class="font-label-caps text-on-surface-variant text-[10px]">TIME TO FAIL</span>
+<span class="block font-metric-lg text-error">0.4s</span>
+</div>
+</div>
+<div class="mt-auto">
+<div class="flex justify-between items-center mb-1">
+<span class="font-label-caps text-on-surface-variant">CORE TEMP</span>
+<span class="text-error font-body-fixed font-bold">1420°C</span>
+</div>
+<div class="w-full bg-[#2A2A2A] h-2">
+<div class="bg-[#ff3b30] h-full" style="width: 95%;"></div>
+</div>
+</div>
+</div>
+</div>
+<!-- Event Log Bento -->
+<div class="col-span-12 lg:col-span-6 panel-border bg-[#1A1A1A] p-4 flex flex-col">
+<div class="flex justify-between items-center border-b border-[#2A2A2A] pb-2 mb-4">
+<span class="font-label-caps text-on-surface-variant">SYSTEM EVENT LOG</span>
+<span class="font-label-caps text-primary cursor-pointer hover:underline">EXPORT CSV</span>
+</div>
+<div class="space-y-1 overflow-y-auto max-h-48 font-body-fixed text-[12px]">
+<div class="flex gap-4 p-2 bg-error/10 border-l-2 border-error text-error">
+<span class="shrink-0">14:02:11</span>
+<span class="font-bold">CRITICAL</span>
+<span>INJECTION LINE 04 RUPTURE DETECTED</span>
+</div>
+<div class="flex gap-4 p-2 bg-error/5 border-l-2 border-error/50 text-error">
+<span class="shrink-0">14:02:09</span>
+<span class="font-bold">CRITICAL</span>
+<span>PRESSURE SPIKE EXCEEDS DESIGN TOLERANCE (+400%)</span>
+</div>
+<div class="flex gap-4 p-2 hover:bg-surface-variant transition-colors">
+<span class="shrink-0 text-on-surface-variant">14:01:55</span>
+<span class="font-bold text-surface-tint">WARNING</span>
+<span>TURBOCHARGER OVER-SPEED DETECTED</span>
+</div>
+<div class="flex gap-4 p-2 hover:bg-surface-variant transition-colors">
+<span class="shrink-0 text-on-surface-variant">14:01:30</span>
+<span class="font-bold text-on-surface-variant">INFO</span>
+<span>THERMAL SCAN COMPLETED - NO ANOMALIES</span>
+</div>
+</div>
+</div>
+<!-- Simulation Toggle Panel -->
+<div class="col-span-12 lg:col-span-3 panel-border bg-[#1A1A1A] p-4 flex flex-col border-primary">
+<div class="flex justify-between items-center border-b border-[#2A2A2A] pb-2 mb-4">
+<span class="font-label-caps text-on-surface-variant">SIMULATION OVERRIDE</span>
+<div class="w-10 h-5 bg-primary-container relative cursor-pointer">
+<div class="absolute right-0 top-0 bottom-0 w-5 bg-primary shadow-sm"></div>
+</div>
+</div>
+<div class="space-y-4">
+<div class="flex justify-between items-center">
+<label class="font-label-caps text-[10px]">INJECTION SIM</label>
+<span class="text-primary font-bold font-body-fixed">ACTIVE</span>
+</div>
+<div class="flex justify-between items-center opacity-50">
+<label class="font-label-caps text-[10px]">HYDRAULIC LOAD</label>
+<span class="text-on-surface-variant font-body-fixed">LOCKED</span>
+</div>
+<button class="w-full py-2 bg-transparent border border-primary text-primary font-label-caps hover:bg-primary hover:text-black transition-all">
+                            RESET SIMULATION
+                        </button>
+</div>
+</div>
+<!-- Map / Location Panel -->
+<div class="col-span-12 lg:col-span-3 panel-border bg-[#1A1A1A] overflow-hidden relative group">
+<div class="absolute top-0 left-0 right-0 p-4 bg-gradient-to-b from-black/80 to-transparent z-10">
+<span class="font-label-caps text-on-surface-variant">ASSET LOCATION</span>
+<h4 class="font-headline-md text-primary">PERTH BASIN HUB</h4>
+</div>
+<img class="w-full h-full object-cover grayscale brightness-50 group-hover:grayscale-0 transition-all duration-700" data-alt="A detailed industrial satellite map of a remote mining facility in a desert environment, showing grid patterns, heavy machinery shadows, and infrastructure nodes. The lighting is harsh mid-day sun, emphasizing the rugged terrain and industrial scale. The overall aesthetic is technical and utilitarian, matching the Caterpillar brand with high contrast and precision." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAj5t8hpzEpuTLTfzg7ldWJzwXVN_BRAspj67K6Oe5x4xEqaiv5ioh8XW_9Uz82PRSKeOWotlop09xZh86OUbLKSN8og3H-9tRJXAG-lkoTJcQ5xEnIlpc8AOImnjyPO0vw0tyRDHUuWSeQ6urVdDwi3tAmauEX443RzZdbWkJpR73cmzX67M_xELomMEr8s8KT-tgnsJnGfBpYkVnpF2J8BRaYFbPNBH9DKRKCio8QXnhTfzyHQsQkyfJenKw5CLRh7aKvlCr65cI"/>
+<div class="absolute bottom-4 right-4 z-10">
+<span class="bg-[#0A0A0A] p-2 border border-[#333333] text-primary font-body-fixed text-[10px]">COORD: 29.1° S, 115.3° E</span>
+</div>
+</div>
+</div>
+</main>
+</div>
+<!-- Footer -->
+<footer class="bg-surface-dim dark:bg-surface-dim text-on-surface-variant dark:text-on-surface-variant border-t border-outline dark:border-outline flex justify-between items-center w-full px-margin-desktop py-2 shrink-0">
+<div class="flex gap-6">
+<span class="text-label-caps font-bold text-on-surface uppercase">CAT CONFIDENTIAL - INDUSTRIAL USE ONLY</span>
+<div class="flex gap-4 font-body-fixed text-[12px]">
+<span class="hover:text-primary transition-colors cursor-pointer uppercase">SYSTEM STATUS</span>
+<span class="hover:text-primary transition-colors cursor-pointer uppercase">LEGAL</span>
+<span class="hover:text-primary transition-colors cursor-pointer uppercase">SUPPORT</span>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<div class="flex items-center gap-2">
+<div class="w-2 h-2 rounded-full bg-[#ff3b30] critical-text-blink"></div>
+<span class="font-label-caps text-[10px]">SENSORS ERR: 0x4F2</span>
+</div>
+<span class="font-body-fixed text-[12px]">UTC 14:02:45</span>
+</div>
+</footer>
+<script>
+        // Simple interactive simulation of sensor jitter
+        const metrics = document.querySelectorAll('.font-metric-lg');
+        setInterval(() => {
+            metrics.forEach(el => {
+                if (el.classList.contains('text-error')) {
+                    const val = parseFloat(el.innerText);
+                    if (!isNaN(val)) {
+                        const jitter = (Math.random() - 0.5) * 5;
+                        el.innerText = (val + jitter).toFixed(1);
+                    }
+                }
+            });
+        }, 500);
+
+        // Flash interaction for protocol advisory
+        const advisory = document.querySelector('.fail-glow');
+        advisory.addEventListener('click', () => {
+            advisory.style.borderColor = '#ffffff';
+            setTimeout(() => advisory.style.borderColor = '#ff3b30', 200);
+        });
+    </script>
+</body></html>

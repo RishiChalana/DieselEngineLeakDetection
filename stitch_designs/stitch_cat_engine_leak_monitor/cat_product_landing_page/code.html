@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>LeakGuard Industrial | The Standard in Engine Integrity</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&amp;family=JetBrains+Mono:wght@400;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "secondary-container": "#474746",
+                    "inverse-surface": "#ebe2cf",
+                    "on-tertiary-fixed": "#001f23",
+                    "surface-tint": "#edc200",
+                    "on-tertiary-container": "#006670",
+                    "background": "#0A0A0A",
+                    "tertiary-fixed-dim": "#00dbed",
+                    "on-background": "#ebe2cf",
+                    "on-secondary-fixed-variant": "#474746",
+                    "tertiary-fixed": "#8df2ff",
+                    "tertiary": "#d0f9ff",
+                    "tertiary-container": "#0bebff",
+                    "surface": "#171309",
+                    "on-primary": "#3c2f00",
+                    "on-primary-fixed": "#231b00",
+                    "on-primary-container": "#6f5a00",
+                    "primary-fixed-dim": "#edc200",
+                    "surface-container-highest": "#393428",
+                    "on-secondary-fixed": "#1b1c1c",
+                    "on-secondary-container": "#b6b5b4",
+                    "surface-container-lowest": "#110e05",
+                    "on-tertiary-fixed-variant": "#004f56",
+                    "primary-fixed": "#ffe07f",
+                    "primary-container": "#ffd100",
+                    "on-surface-variant": "#d1c6ab",
+                    "primary": "#fff1ce",
+                    "on-error": "#690005",
+                    "inverse-primary": "#725c00",
+                    "surface-dim": "#171309",
+                    "surface-container": "#231f14",
+                    "on-tertiary": "#00363c",
+                    "error": "#ffb4ab",
+                    "surface-bright": "#3e392c",
+                    "outline": "#9a9077",
+                    "inverse-on-surface": "#353024",
+                    "surface-variant": "#393428",
+                    "surface-container-low": "#1f1b10",
+                    "error-container": "#93000a",
+                    "surface-container-high": "#2e2a1e",
+                    "on-secondary": "#303030",
+                    "secondary-fixed": "#e4e2e1",
+                    "secondary": "#c8c6c5",
+                    "secondary-fixed-dim": "#c8c6c5",
+                    "on-surface": "#ebe2cf",
+                    "outline-variant": "#4d4632",
+                    "on-primary-fixed-variant": "#564500",
+                    "on-error-container": "#ffdad6"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0px",
+                    "lg": "0px",
+                    "xl": "0px",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "unit": "4px",
+                    "margin-mobile": "16px",
+                    "margin-desktop": "32px",
+                    "panel-gap": "8px",
+                    "gutter": "16px"
+            },
+            "fontFamily": {
+                    "headline-md": ["Inter"],
+                    "body-std": ["Inter"],
+                    "metric-lg": ["JetBrains Mono"],
+                    "label-caps": ["Inter"],
+                    "display-lg": ["Inter"],
+                    "body-fixed": ["JetBrains Mono"]
+            },
+            "fontSize": {
+                    "headline-md": ["24px", {"lineHeight": "1.2", "fontWeight": "700"}],
+                    "body-std": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                    "metric-lg": ["32px", {"lineHeight": "1", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                    "label-caps": ["12px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "700"}],
+                    "display-lg": ["48px", {"lineHeight": "1.1", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                    "body-fixed": ["14px", {"lineHeight": "20px", "fontWeight": "400"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        body {
+            background-color: #0A0A0A;
+            color: #ebe2cf;
+            -webkit-font-smoothing: antialiased;
+        }
+        .industrial-border {
+            border: 1px solid #2A2A2A;
+        }
+        .heavy-shadow {
+            box-shadow: 0 20px 50px rgba(0,0,0,0.8);
+        }
+        .hero-gradient {
+            background: linear-gradient(to right, rgba(10,10,10,1) 30%, rgba(10,10,10,0.4) 100%);
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }
+    </style>
+</head>
+<body class="font-body-std selection:bg-primary-container selection:text-on-primary">
+<!-- Top Navigation Bar -->
+<nav class="fixed top-0 w-full z-50 bg-background/80 backdrop-blur-md border-b border-outline-variant flex justify-between items-center px-margin-desktop py-4 max-w-full mx-auto">
+<div class="font-headline-md text-headline-md font-bold text-primary-container tracking-tighter uppercase">
+            LeakGuard Industrial
+        </div>
+<div class="hidden md:flex items-center space-x-8">
+<a class="font-label-caps text-label-caps text-primary-container font-bold border-b-2 border-primary-container pb-1 uppercase" href="#">Platform</a>
+<a class="font-label-caps text-label-caps text-on-surface-variant hover:text-on-surface transition-colors uppercase" href="#">Features</a>
+<a class="font-label-caps text-label-caps text-on-surface-variant hover:text-on-surface transition-colors uppercase" href="#">Specs</a>
+<a class="font-label-caps text-label-caps text-on-surface-variant hover:text-on-surface transition-colors uppercase" href="#">Inquiry</a>
+</div>
+<button class="bg-primary-container text-on-primary px-6 py-3 font-label-caps text-label-caps font-bold uppercase hover:opacity-90 active:scale-95 transition-all">
+            Get a Quote
+        </button>
+</nav>
+<!-- Hero Section -->
+<section class="relative min-h-screen flex items-center pt-20">
+<div class="absolute inset-0 z-0 overflow-hidden">
+<img alt="Industrial engine background" class="w-full h-full object-cover grayscale opacity-60" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCcgEAhNpagC-awLCghs9V3SS62bSTHan4frxTTYpk5dOKQn3TTaKe6SquhMDHqnuf-2398-8EI0cHQ6gqAZZNusTmLbgUSSja1AQU3dakEeuEaf91MdVY6ybfH0USNSo1GC2R4ijBvkp2oNVxYc5m-Vu_ryHe1uEju88VeAhr9P7_j38VEhz4Cwi3D68JSc7oLzsNOBJg3wrLoQT6NwYezgU_Fsnq1G8uHcXZA-5AGEnrvykf6dyL3CWaspBqEVpZDPYLlxQ0kqdo"/>
+<div class="absolute inset-0 hero-gradient"></div>
+</div>
+<div class="relative z-10 px-margin-desktop max-w-5xl">
+<div class="inline-block px-4 py-1 border border-primary-container/30 bg-primary-container/5 mb-6">
+<span class="font-label-caps text-label-caps text-primary-container tracking-[0.2em] uppercase">Precision Engineered</span>
+</div>
+<h1 class="font-display-lg text-display-lg md:text-[80px] leading-tight font-black text-on-background mb-6 tracking-tighter uppercase">
+                The Standard in<br/><span class="text-primary-container">Engine Integrity.</span>
+</h1>
+<p class="font-body-std text-headline-md text-on-surface-variant max-w-2xl mb-10 leading-relaxed">
+                Caterpillar’s advanced acoustic and pressure-based leak detection for the most demanding industrial environments.
+            </p>
+<div class="flex flex-col sm:flex-row gap-panel-gap">
+<button class="bg-primary-container text-on-primary px-10 py-5 font-headline-md text-headline-md uppercase font-black hover:bg-primary-container/90 transition-colors">
+                    Request Technical Specs
+                </button>
+<button class="border border-primary-container text-primary-container px-10 py-5 font-headline-md text-headline-md uppercase font-black hover:bg-primary-container/10 transition-colors">
+                    View Demo
+                </button>
+</div>
+</div>
+</section>
+<!-- Value Proposition -->
+<section class="bg-surface-container-lowest py-24 px-margin-desktop border-y border-outline-variant">
+<div class="grid grid-cols-1 md:grid-cols-3 gap-12">
+<!-- Col 1 -->
+<div class="industrial-border p-10 bg-background hover:border-primary-container transition-colors group">
+<div class="mb-8 text-primary-container">
+<span class="material-symbols-outlined text-[48px]" style="font-variation-settings: 'FILL' 1;">analytics</span>
+</div>
+<h3 class="font-headline-md text-headline-md uppercase mb-4 tracking-tight">Real-time Anomaly Detection</h3>
+<p class="font-body-std text-on-surface-variant leading-relaxed">
+                    Ultra-sensitive acoustic sensors identify structural vulnerabilities before failure, reducing catastrophic risk in critical heavy machinery operations.
+                </p>
+<div class="mt-8 flex items-center gap-2 text-primary-container font-label-caps text-label-caps uppercase tracking-widest opacity-0 group-hover:opacity-100 transition-opacity">
+                    Technical Overview <span class="material-symbols-outlined text-sm">arrow_forward</span>
+</div>
+</div>
+<!-- Col 2 -->
+<div class="industrial-border p-10 bg-background hover:border-primary-container transition-colors group">
+<div class="mb-8 text-primary-container">
+<span class="material-symbols-outlined text-[48px]" style="font-variation-settings: 'FILL' 1;">memory</span>
+</div>
+<h3 class="font-headline-md text-headline-md uppercase mb-4 tracking-tight">Machine Learning Diagnostics</h3>
+<p class="font-body-std text-on-surface-variant leading-relaxed">
+                    Edge-processed algorithms filter ambient industrial noise to pinpoint micro-leaks with 98.7% accuracy across all Caterpillar C-Series platforms.
+                </p>
+<div class="mt-8 flex items-center gap-2 text-primary-container font-label-caps text-label-caps uppercase tracking-widest opacity-0 group-hover:opacity-100 transition-opacity">
+                    AI Whitepaper <span class="material-symbols-outlined text-sm">arrow_forward</span>
+</div>
+</div>
+<!-- Col 3 -->
+<div class="industrial-border p-10 bg-background hover:border-primary-container transition-colors group">
+<div class="mb-8 text-primary-container">
+<span class="material-symbols-outlined text-[48px]" style="font-variation-settings: 'FILL' 1;">hub</span>
+</div>
+<h3 class="font-headline-md text-headline-md uppercase mb-4 tracking-tight">Enterprise Integration</h3>
+<p class="font-body-std text-on-surface-variant leading-relaxed">
+                    Seamless telemetry streaming into SCADA and ERP systems. Full API support for fleet-wide monitoring and predictive maintenance scheduling.
+                </p>
+<div class="mt-8 flex items-center gap-2 text-primary-container font-label-caps text-label-caps uppercase tracking-widest opacity-0 group-hover:opacity-100 transition-opacity">
+                    API Documentation <span class="material-symbols-outlined text-sm">arrow_forward</span>
+</div>
+</div>
+</div>
+</section>
+<!-- Product Showcase -->
+<section class="py-24 px-margin-desktop overflow-hidden">
+<div class="flex flex-col lg:flex-row items-center gap-16">
+<div class="lg:w-1/2 relative">
+<div class="absolute -top-10 -left-10 w-40 h-40 border-t-2 border-l-2 border-primary-container opacity-20"></div>
+<div class="industrial-border p-1 bg-surface-container-high heavy-shadow">
+<img alt="LeakGuard Software Interface" class="w-full grayscale brightness-90 hover:grayscale-0 transition-all duration-700" src="https://lh3.googleusercontent.com/aida-public/AB6AXuClDJw5wX7jzHsDegqedG5mzG_arrroMZ9j8WoEHqgU6pInXvTWCHrJly8GO9D7bw5hzBtKcjW4ttY5pCHyc8jFg4L0He6zNlFCqdPhpqnJPcfLMGyZaEzZPk7SVxeAynokftQ17gDpjyS71ZjBoQTndcInU0-C_F64PfX1y_RhmFAF4wsFK41Uz_fnXgE26APead3xFTjhwy26qkU-aVE9KBpyedXHSbgPeeF5EJfXaVEdprkvm-PQRT9dEbMJPDOiMmbz-Nl9izo"/>
+</div>
+<div class="absolute -bottom-10 -right-10 w-40 h-40 border-b-2 border-r-2 border-primary-container opacity-20"></div>
+</div>
+<div class="lg:w-1/2">
+<h2 class="font-label-caps text-label-caps text-primary-container uppercase tracking-[0.3em] mb-4">Command &amp; Control</h2>
+<h3 class="font-display-lg text-display-lg uppercase font-black mb-8 leading-tight">Actionable Intelligence for Zero-Downtime Operations.</h3>
+<div class="space-y-6">
+<div class="flex gap-4 items-start border-l-2 border-primary-container pl-6 py-2">
+<div>
+<h4 class="font-headline-md text-headline-md uppercase tracking-tight">Volumetric Analysis</h4>
+<p class="text-on-surface-variant font-body-std mt-2">Immediate quantification of fluid loss and pressure drop rates across distributed sensing nodes.</p>
+</div>
+</div>
+<div class="flex gap-4 items-start border-l-2 border-outline-variant pl-6 py-2">
+<div>
+<h4 class="font-headline-md text-headline-md uppercase tracking-tight text-on-surface-variant">Heatmap Localization</h4>
+<p class="text-on-surface-variant font-body-std mt-2">3D spatial mapping of acoustic anomalies relative to engine geometry for surgical repair interventions.</p>
+</div>
+</div>
+</div>
+<button class="mt-12 bg-primary-container text-on-primary px-8 py-4 font-label-caps text-label-caps font-bold uppercase hover:opacity-90">
+                    Explore Dashboard Features
+                </button>
+</div>
+</div>
+</section>
+<!-- Technical Grid -->
+<section class="bg-surface-container py-24 px-margin-desktop border-t border-outline-variant">
+<div class="mb-16 text-center">
+<h2 class="font-display-lg text-display-lg uppercase font-black tracking-tighter">Hardware Specifications</h2>
+<div class="w-24 h-1 bg-primary-container mx-auto mt-4"></div>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-panel-gap">
+<!-- Feature 1 -->
+<div class="industrial-border p-8 bg-background flex flex-col justify-between">
+<div>
+<span class="font-metric-lg text-metric-lg text-primary-container opacity-30">01</span>
+<h4 class="font-label-caps text-label-caps uppercase mt-4 text-on-surface mb-2">Acoustic Sensors</h4>
+<p class="text-on-surface-variant font-body-fixed">Ultra-wideband piezo-electric transducers rated for temperatures up to 850°C.</p>
+</div>
+</div>
+<!-- Feature 2 -->
+<div class="industrial-border p-8 bg-background flex flex-col justify-between">
+<div>
+<span class="font-metric-lg text-metric-lg text-primary-container opacity-30">02</span>
+<h4 class="font-label-caps text-label-caps uppercase mt-4 text-on-surface mb-2">Confidence Intervals</h4>
+<p class="text-on-surface-variant font-body-fixed">98.9% statistical confidence on leak identification with sub-0.5L/hr sensitivity.</p>
+</div>
+</div>
+<!-- Feature 3 -->
+<div class="industrial-border p-8 bg-background flex flex-col justify-between">
+<div>
+<span class="font-metric-lg text-metric-lg text-primary-container opacity-30">03</span>
+<h4 class="font-label-caps text-label-caps uppercase mt-4 text-on-surface mb-2">Gateway 14A Encryption</h4>
+<p class="text-on-surface-variant font-body-fixed">AES-256 military-grade hardware encryption for all outgoing telemetry streams.</p>
+</div>
+</div>
+<!-- Feature 4 -->
+<div class="industrial-border p-8 bg-background flex flex-col justify-between">
+<div>
+<span class="font-metric-lg text-metric-lg text-primary-container opacity-30">04</span>
+<h4 class="font-label-caps text-label-caps uppercase mt-4 text-on-surface mb-2">IP69K Ruggedization</h4>
+<p class="text-on-surface-variant font-body-fixed">Full ingress protection against high-pressure steam cleaning and corrosive fluids.</p>
+</div>
+</div>
+<!-- Feature 5 -->
+<div class="industrial-border p-8 bg-background flex flex-col justify-between">
+<div>
+<span class="font-metric-lg text-metric-lg text-primary-container opacity-30">05</span>
+<h4 class="font-label-caps text-label-caps uppercase mt-4 text-on-surface mb-2">Edge Computation</h4>
+<p class="text-on-surface-variant font-body-fixed">Dual-core processing handles FFT analysis locally, minimizing network load.</p>
+</div>
+</div>
+<!-- Feature 6 -->
+<div class="industrial-border p-8 bg-background flex flex-col justify-between">
+<div>
+<span class="font-metric-lg text-metric-lg text-primary-container opacity-30">06</span>
+<h4 class="font-label-caps text-label-caps uppercase mt-4 text-on-surface mb-2">C-Series Native</h4>
+<p class="text-on-surface-variant font-body-fixed">Pre-calibrated acoustic signatures for every CAT large-bore engine displacement.</p>
+</div>
+</div>
+</div>
+</section>
+<!-- Final CTA -->
+<section class="relative py-32 px-margin-desktop text-center overflow-hidden">
+<div class="absolute inset-0 z-0">
+<div class="absolute inset-0 bg-primary-container/5 mix-blend-overlay"></div>
+<!-- Subtle Grid Pattern -->
+<div class="absolute inset-0 opacity-[0.03]" style="background-image: radial-gradient(#FFD100 0.5px, transparent 0.5px); background-size: 24px 24px;"></div>
+</div>
+<div class="relative z-10 max-w-4xl mx-auto">
+<h2 class="font-display-lg text-display-lg uppercase font-black mb-8 leading-none">Elevate Your Test Cell<br/>Performance.</h2>
+<p class="font-body-std text-headline-md text-on-surface-variant mb-12">
+                Integrate industry-leading diagnostics into your maintenance ecosystem today. Our technical engineers are standing by for consultation.
+            </p>
+<div class="grid md:grid-cols-2 gap-panel-gap text-left max-w-2xl mx-auto industrial-border p-2 bg-background/50 backdrop-blur">
+<input class="bg-surface-container-low border-0 font-label-caps text-label-caps text-on-surface placeholder:text-on-surface-variant p-4 focus:ring-1 focus:ring-primary-container uppercase" placeholder="ENTER CORPORATE EMAIL" type="email"/>
+<button class="bg-primary-container text-on-primary font-headline-md text-headline-md uppercase font-black py-4 hover:bg-white transition-colors">
+                    Inquire Now
+                </button>
+</div>
+<div class="mt-8 flex justify-center gap-12 font-label-caps text-label-caps text-on-surface-variant">
+<span class="flex items-center gap-2"><span class="material-symbols-outlined text-primary-container">verified</span> ISO 9001:2015 CERTIFIED</span>
+<span class="flex items-center gap-2"><span class="material-symbols-outlined text-primary-container">support_agent</span> 24/7 GLOBAL SUPPORT</span>
+</div>
+</div>
+</section>
+<!-- Footer -->
+<footer class="bg-surface-container-lowest border-t border-outline-variant w-full py-12">
+<div class="flex flex-col md:flex-row justify-between items-center px-margin-desktop space-y-4 md:space-y-0">
+<div class="font-headline-md text-headline-md text-primary-container uppercase font-black tracking-tighter">
+                LeakGuard
+            </div>
+<div class="flex gap-8">
+<a class="font-label-caps text-label-caps text-on-surface-variant hover:text-primary transition-colors uppercase" href="#">Privacy Policy</a>
+<a class="font-label-caps text-label-caps text-on-surface-variant hover:text-primary transition-colors uppercase" href="#">Technical Support</a>
+<a class="font-label-caps text-label-caps text-on-surface-variant hover:text-primary transition-colors uppercase" href="#">Global Distribution</a>
+<a class="font-label-caps text-label-caps text-on-surface-variant hover:text-primary transition-colors uppercase" href="#">ISO Certification</a>
+</div>
+<div class="font-label-caps text-label-caps text-on-surface-variant uppercase text-right opacity-50">
+                © 2024 LeakGuard Systems. Precision Engineered for Heavy Industry.
+            </div>
+</div>
+</footer>
+<script>
+        // Simple scroll interaction for nav
+        window.addEventListener('scroll', () => {
+            const nav = document.querySelector('nav');
+            if (window.scrollY > 50) {
+                nav.classList.add('bg-background');
+                nav.classList.remove('bg-background/80');
+            } else {
+                nav.classList.add('bg-background/80');
+                nav.classList.remove('bg-background');
+            }
+        });
+
+        // Hover micro-interactions for spec grid
+        document.querySelectorAll('.industrial-border').forEach(panel => {
+            panel.addEventListener('mouseenter', () => {
+                panel.style.transform = 'translateY(-4px)';
+                panel.style.borderColor = '#FFD100';
+            });
+            panel.addEventListener('mouseleave', () => {
+                panel.style.transform = 'translateY(0)';
+                panel.style.borderColor = '#2A2A2A';
+            });
+        });
+    </script>
+</body></html>

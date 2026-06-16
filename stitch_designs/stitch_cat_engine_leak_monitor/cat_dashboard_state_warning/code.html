@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>CAT ENGINE LEAK DETECTION - WARNING STATE</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&family=JetBrains+Mono:wght@400;600;800&family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&family=JetBrains+Mono:wght@100..900&display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "error": "#ffb4ab",
+                        "on-secondary-fixed-variant": "#474746",
+                        "on-tertiary-fixed": "#001f23",
+                        "secondary-fixed": "#e4e2e1",
+                        "on-tertiary-fixed-variant": "#004f56",
+                        "on-surface-variant": "#d1c6ab",
+                        "on-primary-container": "#6f5a00",
+                        "secondary-fixed-dim": "#c8c6c5",
+                        "on-secondary-container": "#b6b5b4",
+                        "secondary": "#c8c6c5",
+                        "outline-variant": "#4d4632",
+                        "on-surface": "#ebe2cf",
+                        "on-secondary-fixed": "#1b1c1c",
+                        "surface-bright": "#3e392c",
+                        "primary-fixed": "#ffe07f",
+                        "inverse-on-surface": "#353024",
+                        "tertiary-container": "#0bebff",
+                        "primary": "#fff1ce",
+                        "tertiary": "#d0f9ff",
+                        "surface-tint": "#edc200",
+                        "on-error": "#690005",
+                        "tertiary-fixed": "#8df2ff",
+                        "surface-dim": "#171309",
+                        "primary-fixed-dim": "#edc200",
+                        "surface-variant": "#393428",
+                        "surface-container-low": "#1f1b10",
+                        "on-primary": "#3c2f00",
+                        "on-primary-fixed-variant": "#564500",
+                        "on-primary-fixed": "#231b00",
+                        "on-background": "#ebe2cf",
+                        "on-error-container": "#ffdad6",
+                        "surface": "#171309",
+                        "surface-container": "#231f14",
+                        "inverse-primary": "#725c00",
+                        "surface-container-lowest": "#110e05",
+                        "primary-container": "#ffd100",
+                        "on-secondary": "#303030",
+                        "surface-container-high": "#2e2a1e",
+                        "error-container": "#93000a",
+                        "background": "#171309",
+                        "on-tertiary": "#00363c",
+                        "tertiary-fixed-dim": "#00dbed",
+                        "surface-container-highest": "#393428",
+                        "outline": "#9a9077",
+                        "secondary-container": "#474746",
+                        "on-tertiary-container": "#006670",
+                        "inverse-surface": "#ebe2cf"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "margin-mobile": "16px",
+                        "panel-gap": "8px",
+                        "unit": "4px",
+                        "margin-desktop": "32px",
+                        "gutter": "16px"
+                    },
+                    "fontFamily": {
+                        "metric-lg": ["JetBrains Mono"],
+                        "label-caps": ["Inter"],
+                        "headline-md": ["Inter"],
+                        "body-std": ["Inter"],
+                        "body-fixed": ["JetBrains Mono"],
+                        "display-lg": ["Inter"]
+                    },
+                    "fontSize": {
+                        "metric-lg": ["32px", {"lineHeight": "1", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                        "label-caps": ["12px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "700"}],
+                        "headline-md": ["24px", {"lineHeight": "1.2", "fontWeight": "700"}],
+                        "body-std": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                        "body-fixed": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                        "display-lg": ["48px", {"lineHeight": "1.1", "letterSpacing": "-0.02em", "fontWeight": "700"}]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        body {
+            background-color: #0A0A0A;
+            color: #ebe2cf;
+            font-family: 'Inter', sans-serif;
+            overflow: hidden;
+        }
+        .industrial-panel {
+            background-color: #1A1A1A;
+            border: 1px solid #2A2A2A;
+        }
+        .grid-bg {
+            background-image: linear-gradient(#2A2A2A 1px, transparent 1px), linear-gradient(90deg, #2A2A2A 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
+        .chart-path {
+            stroke-dasharray: 1000;
+            stroke-dashoffset: 1000;
+            animation: dash 5s linear forwards;
+        }
+        @keyframes dash {
+            to { stroke-dashoffset: 0; }
+        }
+    </style>
+</head>
+<body class="h-screen flex flex-col">
+<!-- TopNavBar -->
+<header class="bg-background dark:bg-background border-b border-outline dark:border-outline flex justify-between items-center w-full px-margin-desktop h-16 shrink-0 z-50">
+<div class="flex items-center gap-6">
+<span class="font-display-lg text-display-lg font-black text-primary uppercase">CAT ENGINE LEAK DETECTION</span>
+<div class="bg-primary-container text-on-primary-container px-3 py-1 font-bold text-label-caps flex items-center gap-2">
+<span class="material-symbols-outlined text-sm" style="font-variation-settings: 'FILL' 1;">warning</span>
+                WARNING
+            </div>
+</div>
+<div class="flex items-center gap-4">
+<span class="font-metric-lg text-metric-lg text-primary">CAT-3412-001</span>
+<div class="flex gap-2">
+<button class="p-2 hover:bg-surface-variant transition-colors active:scale-95 duration-100">
+<span class="material-symbols-outlined text-primary">settings</span>
+</button>
+<button class="p-2 hover:bg-surface-variant transition-colors active:scale-95 duration-100">
+<span class="material-symbols-outlined text-primary">power_settings_new</span>
+</button>
+</div>
+</div>
+</header>
+<div class="flex flex-1 overflow-hidden">
+<!-- SideNavBar -->
+<aside class="bg-surface dark:bg-surface border-r border-outline dark:border-outline flex flex-col h-full py-panel-gap w-64 shrink-0">
+<div class="px-6 mb-8">
+<p class="font-label-caps text-label-caps uppercase text-primary mb-1">CONTROL PANEL</p>
+<p class="text-[10px] text-on-surface-variant tracking-widest font-bold">SYSTEM ACTIVE</p>
+</div>
+<nav class="flex-1 space-y-1">
+<a class="bg-primary text-on-primary font-bold px-4 py-3 flex items-center gap-3 active:bg-primary-container transition-all" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="font-label-caps text-label-caps uppercase">DASHBOARD</span>
+</a>
+<a class="text-on-surface-variant px-4 py-3 flex items-center gap-3 hover:text-primary hover:bg-surface-container-high active:bg-primary-container transition-all" href="#">
+<span class="material-symbols-outlined">analytics</span>
+<span class="font-label-caps text-label-caps uppercase">TELEMETRY</span>
+</a>
+<a class="text-on-surface-variant px-4 py-3 flex items-center gap-3 hover:text-primary hover:bg-surface-container-high active:bg-primary-container transition-all" href="#">
+<span class="material-symbols-outlined">precision_manufacturing</span>
+<span class="font-label-caps text-label-caps uppercase">DIAGNOSTICS</span>
+</a>
+<a class="text-on-surface-variant px-4 py-3 flex items-center gap-3 hover:text-primary hover:bg-surface-container-high active:bg-primary-container transition-all" href="#">
+<span class="material-symbols-outlined">history</span>
+<span class="font-label-caps text-label-caps uppercase">HISTORY</span>
+</a>
+</nav>
+<div class="px-4 mt-auto">
+<button class="w-full bg-error text-on-error font-bold uppercase py-4 flex items-center justify-center gap-2 active:scale-95 transition-transform">
+<span class="material-symbols-outlined">emergency_home</span>
+                    EMERGENCY STOP
+                </button>
+</div>
+</aside>
+<!-- Main Content (Canvas) -->
+<main class="flex-1 p-panel-gap grid grid-cols-12 grid-rows-6 gap-panel-gap bg-background overflow-hidden relative">
+<!-- Bento Grid - Engine Visualization -->
+<section class="col-span-8 row-span-4 industrial-panel relative overflow-hidden flex flex-col">
+<div class="px-4 py-2 border-b border-outline flex justify-between items-center bg-surface-container-lowest shrink-0">
+<span class="font-label-caps text-label-caps text-on-surface">3D ENGINE ANALYTICS</span>
+<span class="text-[10px] text-primary-container font-mono">LIVE FEED : 120 FPS</span>
+</div>
+<div class="flex-1 relative flex items-center justify-center p-8">
+<div class="absolute inset-0 grid-bg opacity-10"></div>
+<img class="h-full w-full object-contain mix-blend-screen opacity-80" data-alt="A highly detailed 3D technical blueprint of a heavy-duty Caterpillar industrial engine in a digital wireframe style. The engine is rendered in a deep charcoal and metallic grey palette with vibrant yellow highlights indicating friction zones and thermal leak points. The background is a dark, industrial void with faint technical grid lines and glowing data points, creating a high-end engineering dashboard feel with cold lighting and professional technical precision." src="https://lh3.googleusercontent.com/aida-public/AB6AXuARYqYVSIkTjwjRbTM8AjYnw8QvWihpkbUulSA7xNKLE8enEZI204zZmQEmomWOqCpToQKlRV99Sc7xg0ZJAke8ropAFirV4yW18fcdbDCxwFhBkKIhV6jJIqQXnr0lMwH4KUNPuc_U-i07eUn0ieITAnd1LB3LKjmkg0fJydUF6gWvV9CRGh7BQDejtCcAG_gyMPmDXPxiNL_PbAscujqF14RAX0PwtHYGXSiVjPNX5t2vq8fCx5t-U8DaKOWbWyfpsBeJloAzNCQ"/>
+<!-- Floating Data Pointers -->
+<div class="absolute top-1/4 right-1/3 border border-primary-container bg-surface-container-lowest/80 p-2 backdrop-blur-sm">
+<p class="text-[10px] text-on-surface-variant font-bold">CYLINDER 4 TEMP</p>
+<p class="text-metric-lg font-metric-lg text-primary-container">842°C</p>
+</div>
+</div>
+</section>
+<!-- Metrics Sidebar -->
+<section class="col-span-4 row-span-3 industrial-panel flex flex-col">
+<div class="px-4 py-2 border-b border-outline flex justify-between items-center bg-surface-container-lowest shrink-0">
+<span class="font-label-caps text-label-caps text-on-surface">CRITICAL TELEMETRY</span>
+</div>
+<div class="flex-1 p-4 flex flex-col gap-4">
+<div class="grid grid-cols-2 gap-2">
+<div class="p-3 bg-surface-container-low border border-outline/30">
+<p class="text-[10px] text-on-surface-variant font-bold mb-1">OIL PRESSURE</p>
+<div class="flex items-baseline gap-1">
+<span class="text-headline-md font-metric-lg text-primary">62.4</span>
+<span class="text-[10px] text-on-surface-variant">PSI</span>
+</div>
+</div>
+<div class="p-3 bg-surface-container-low border border-primary-container">
+<p class="text-[10px] text-primary-container font-bold mb-1">EXHAUST TEMP</p>
+<div class="flex items-baseline gap-1">
+<span class="text-headline-md font-metric-lg text-primary-container">1240</span>
+<span class="text-[10px] text-primary-container">°F</span>
+</div>
+<div class="mt-2 h-1 bg-surface-variant">
+<div class="h-full bg-primary-container w-[92%]"></div>
+</div>
+</div>
+</div>
+<div class="flex-1 industrial-panel bg-surface-container-lowest p-4 relative overflow-hidden">
+<p class="text-[10px] text-on-surface-variant font-bold mb-4 uppercase">Pressure Trends (24H)</p>
+<svg class="w-full h-32 overflow-visible" viewbox="0 0 400 100">
+<!-- Threshold Line -->
+<line stroke="#ffd100" stroke-dasharray="4 4" stroke-width="1" x1="0" x2="400" y1="30" y2="30"></line>
+<!-- Chart Path -->
+<path class="chart-path" d="M0 80 Q 50 70, 100 75 T 200 60 T 300 45 T 400 28" fill="none" stroke="#ffd100" stroke-width="2"></path>
+<circle cx="400" cy="28" fill="#ffd100" r="4">
+<animate attributename="r" dur="1s" repeatcount="indefinite" values="4;6;4"></animate>
+</circle>
+</svg>
+<div class="mt-4 flex justify-between items-end">
+<div>
+<p class="text-[10px] text-on-surface-variant">CURRENT TREND</p>
+<p class="text-headline-md font-metric-lg text-primary">+12.4% / HR</p>
+</div>
+<span class="material-symbols-outlined text-primary-container" style="font-variation-settings: 'FILL' 1;">trending_up</span>
+</div>
+</div>
+</div>
+</section>
+<!-- Protocol Advisory Panel -->
+<section class="col-span-4 row-span-3 industrial-panel border-primary-container border-2 bg-[#1A1A10]">
+<div class="px-4 py-3 border-b border-primary-container flex items-center gap-3 bg-primary-container">
+<span class="material-symbols-outlined text-on-primary-container" style="font-variation-settings: 'FILL' 1;">info</span>
+<span class="font-label-caps text-label-caps text-on-primary-container">PROTOCOL ADVISORY</span>
+</div>
+<div class="p-6">
+<p class="text-headline-md font-headline-md text-primary-container mb-4">Early Warning Inspection</p>
+<div class="space-y-4">
+<div class="flex gap-4 items-start">
+<span class="font-metric-lg text-primary-container opacity-50">01</span>
+<p class="font-body-std text-body-std text-on-surface">Initiate Stage 2 thermal scan of exhaust manifold clusters immediately.</p>
+</div>
+<div class="flex gap-4 items-start">
+<span class="font-metric-lg text-primary-container opacity-50">02</span>
+<p class="font-body-std text-body-std text-on-surface">Verify coolant bypass valve actuation via HMI diagnostic terminal.</p>
+</div>
+<div class="flex gap-4 items-start">
+<span class="font-metric-lg text-primary-container opacity-50">03</span>
+<p class="font-body-std text-body-std text-on-surface">Prepare lockout/tagout (LOTO) sequence for non-essential systems.</p>
+</div>
+</div>
+<button class="mt-8 w-full border border-primary-container text-primary-container py-3 font-bold uppercase hover:bg-primary-container hover:text-on-primary-container transition-all active:scale-95">
+                        ACKNOWLEDGE PROTOCOL
+                    </button>
+</div>
+</section>
+<!-- Performance Grid -->
+<section class="col-span-8 row-span-2 industrial-panel flex flex-col">
+<div class="px-4 py-2 border-b border-outline flex justify-between items-center bg-surface-container-lowest shrink-0">
+<span class="font-label-caps text-label-caps text-on-surface">PERFORMANCE METRICS</span>
+</div>
+<div class="flex-1 p-4 grid grid-cols-4 gap-4">
+<div class="bg-surface-container-low p-4 border border-outline/20">
+<p class="text-[10px] text-on-surface-variant font-bold mb-2">FUEL CONSUMPTION</p>
+<p class="text-metric-lg font-metric-lg text-primary">14.2 <span class="text-xs">GAL/H</span></p>
+</div>
+<div class="bg-surface-container-low p-4 border border-outline/20">
+<p class="text-[10px] text-on-surface-variant font-bold mb-2">ENGINE LOAD</p>
+<p class="text-metric-lg font-metric-lg text-primary">82 <span class="text-xs">%</span></p>
+</div>
+<div class="bg-surface-container-low p-4 border border-outline/20">
+<p class="text-[10px] text-on-surface-variant font-bold mb-2">RUNTIME</p>
+<p class="text-metric-lg font-metric-lg text-primary">42:12 <span class="text-xs">HRS</span></p>
+</div>
+<div class="bg-surface-container-low p-4 border border-primary-container/40">
+<p class="text-[10px] text-primary-container font-bold mb-2">EFFICIENCY GAP</p>
+<p class="text-metric-lg font-metric-lg text-primary-container">-4.8 <span class="text-xs">%</span></p>
+</div>
+</div>
+</section>
+</main>
+</div>
+<!-- Footer -->
+<footer class="bg-surface-dim dark:bg-surface-dim border-t border-outline dark:border-outline flex justify-between items-center w-full px-margin-desktop py-2 shrink-0 z-50">
+<div class="flex items-center gap-8">
+<span class="text-label-caps font-bold text-on-surface uppercase">CAT CONFIDENTIAL - INDUSTRIAL USE ONLY</span>
+<div class="flex gap-4">
+<a class="text-on-surface-variant text-body-fixed font-body-fixed hover:text-primary transition-colors" href="#">SYSTEM STATUS</a>
+<a class="text-on-surface-variant text-body-fixed font-body-fixed hover:text-primary transition-colors" href="#">LEGAL</a>
+<a class="text-on-surface-variant text-body-fixed font-body-fixed hover:text-primary transition-colors" href="#">SUPPORT</a>
+</div>
+</div>
+<div class="flex items-center gap-2">
+<div class="w-2 h-2 rounded-full bg-primary-container animate-pulse"></div>
+<span class="text-body-fixed font-body-fixed text-primary-container">ENCRYPTED DATA LINK ACTIVE</span>
+</div>
+</footer>
+<script>
+        // Simple micro-interaction for active states
+        document.querySelectorAll('a').forEach(link => {
+            link.addEventListener('click', (e) => {
+                if (link.getAttribute('href') === '#') e.preventDefault();
+            });
+        });
+
+        // Atmospheric effect: Subtle grain/noise over the UI
+        const noise = document.createElement('div');
+        noise.style.position = 'fixed';
+        noise.style.top = '0';
+        noise.style.left = '0';
+        noise.style.width = '100%';
+        noise.style.height = '100%';
+        noise.style.pointerEvents = 'none';
+        noise.style.zIndex = '9999';
+        noise.style.opacity = '0.015';
+        noise.style.background = 'url("https://www.transparenttextures.com/patterns/stardust.png")';
+        document.body.appendChild(noise);
+    </script>
+</body></html>

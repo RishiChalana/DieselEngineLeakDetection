@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>CAT Engine Leak Detection - Dashboard</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;900&amp;family=JetBrains+Mono:wght@400;500;700&amp;family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "error": "#ffb4ab",
+                    "on-secondary-fixed-variant": "#474746",
+                    "on-tertiary-fixed": "#001f23",
+                    "secondary-fixed": "#e4e2e1",
+                    "on-tertiary-fixed-variant": "#004f56",
+                    "on-surface-variant": "#9a9077",
+                    "on-primary-container": "#6f5a00",
+                    "on-secondary-container": "#b6b5b4",
+                    "secondary-fixed-dim": "#c8c6c5",
+                    "secondary": "#c8c6c5",
+                    "outline-variant": "#393428",
+                    "on-secondary-fixed": "#1b1c1c",
+                    "on-surface": "#ebe2cf",
+                    "primary-fixed": "#ffe07f",
+                    "inverse-on-surface": "#353024",
+                    "surface-bright": "#3e392c",
+                    "tertiary-container": "#0bebff",
+                    "primary": "#fff1ce",
+                    "tertiary": "#d0f9ff",
+                    "surface-tint": "#edc200",
+                    "on-error": "#690005",
+                    "tertiary-fixed": "#8df2ff",
+                    "surface-dim": "#171309",
+                    "primary-fixed-dim": "#edc200",
+                    "surface-container-low": "#110e05",
+                    "surface-variant": "#1f1b10",
+                    "on-primary": "#3c2f00",
+                    "on-primary-fixed": "#231b00",
+                    "on-primary-fixed-variant": "#564500",
+                    "on-background": "#ebe2cf",
+                    "on-error-container": "#ffdad6",
+                    "surface": "#0a0a0a",
+                    "surface-container": "#171309",
+                    "inverse-primary": "#725c00",
+                    "surface-container-lowest": "#050505",
+                    "on-secondary": "#303030",
+                    "primary-container": "#ffd100",
+                    "surface-container-high": "#231f14",
+                    "error-container": "#93000a",
+                    "background": "#0a0a0a",
+                    "on-tertiary": "#00363c",
+                    "tertiary-fixed-dim": "#00dbed",
+                    "surface-container-highest": "#2e2a1e",
+                    "outline": "#4d4632",
+                    "secondary-container": "#474746",
+                    "on-tertiary-container": "#006670",
+                    "inverse-surface": "#ebe2cf",
+                    "industrial-red": "#FF3B30",
+                    "industrial-green": "#34C759"
+            },
+            "borderRadius": {
+                    "DEFAULT": "4px",
+                    "lg": "8px",
+                    "xl": "12px",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "margin-mobile": "16px",
+                    "panel-gap": "12px",
+                    "gutter": "20px",
+                    "unit": "4px",
+                    "margin-desktop": "40px"
+            },
+            "fontFamily": {
+                    "body-fixed": ["JetBrains Mono"],
+                    "display-lg": ["Inter"],
+                    "headline-md": ["Inter"],
+                    "body-std": ["Inter"],
+                    "metric-lg": ["JetBrains Mono"],
+                    "label-caps": ["Inter"]
+            },
+            "fontSize": {
+                    "body-fixed": ["13px", {"lineHeight": "20px", "fontWeight": "400"}],
+                    "display-lg": ["40px", {"lineHeight": "1.1", "letterSpacing": "-0.01em", "fontWeight": "900"}],
+                    "headline-md": ["20px", {"lineHeight": "1.2", "fontWeight": "700"}],
+                    "body-std": ["15px", {"lineHeight": "1.6", "fontWeight": "400"}],
+                    "metric-lg": ["28px", {"lineHeight": "1", "letterSpacing": "-0.02em", "fontWeight": "600"}],
+                    "label-caps": ["11px", {"lineHeight": "16px", "letterSpacing": "0.1em", "fontWeight": "600"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 20;
+        }
+        body {
+            background-color: #070707;
+            color: #ebe2cf;
+            font-family: 'Inter', sans-serif;
+            overflow: hidden;
+            -webkit-font-smoothing: antialiased;
+        }
+        
+        .panel-glass {
+            background: linear-gradient(145deg, rgba(30, 30, 30, 0.4) 0%, rgba(10, 10, 10, 0.6) 100%);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            box-shadow: 0 4px 24px -1px rgba(0, 0, 0, 0.4);
+        }
+
+        .inner-panel-gradient {
+            background: linear-gradient(180deg, #161616 0%, #0d0d0d 100%);
+            border: 1px solid rgba(255, 255, 255, 0.03);
+        }
+
+        .data-inlay-deep {
+            background: #050505;
+            border: 1px solid rgba(255, 255, 255, 0.02);
+        }
+        
+        ::-webkit-scrollbar { width: 4px; height: 4px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #444; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: #ffd100; }
+
+        @keyframes pulse-red-soft {
+            0%, 100% { opacity: 0.8; transform: scale(1); }
+            50% { opacity: 0.4; transform: scale(1.2); }
+        }
+        .pulse-critical { animation: pulse-red-soft 2s ease-in-out infinite; }
+        
+        .letter-spacing-widest { letter-spacing: 0.25em; }
+    </style>
+</head>
+<body class="h-screen flex flex-col">
+<!-- TOP BAR -->
+<header class="h-20 flex items-center justify-between px-margin-desktop bg-[#050505] border-b border-white/5 z-50">
+<div class="flex items-center gap-8">
+<img alt="CAT Logo" class="h-8 w-auto brightness-90 contrast-125" src="data:image/png;base64,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"/>
+<div class="h-8 w-px bg-white/10"></div>
+<h1 class="font-display-lg text-white/90 text-[18px] uppercase tracking-[0.3em] font-black">Monitoring Dashboard</h1>
+</div>
+<div class="flex items-center gap-10">
+<div class="flex flex-col items-end">
+<span class="font-label-caps text-on-surface-variant mb-1">ASSET IDENTIFIER</span>
+<span class="font-body-fixed text-primary-container text-[16px] font-bold tracking-wider">CAT-3412-001</span>
+</div>
+<div class="h-10 w-px bg-white/10"></div>
+<div class="flex items-center gap-3 px-4 py-2 rounded-full bg-white/5 border border-white/10">
+<div class="w-2 h-2 rounded-full bg-industrial-green shadow-[0_0_12px_rgba(52,199,89,0.4)]"></div>
+<span class="font-label-caps text-[10px] text-industrial-green uppercase tracking-widest">Live Link Established</span>
+</div>
+</div>
+<div class="flex items-center gap-8">
+<div class="flex flex-col items-end">
+<span class="font-label-caps text-on-surface-variant mb-1">SESSION TIME</span>
+<div class="font-body-fixed text-white text-[18px] tracking-tight font-medium" id="session-timer">21:54:55.31</div>
+</div>
+<button class="px-8 py-3 bg-transparent border border-industrial-red/50 text-industrial-red font-label-caps text-[10px] tracking-widest hover:bg-industrial-red hover:text-white transition-all duration-300 active:scale-95">
+            TERMINATE SESSION
+        </button>
+</div>
+</header>
+<!-- MAIN CONTENT GRID -->
+<main class="flex-1 flex overflow-hidden p-panel-gap gap-panel-gap bg-[#070707]">
+<!-- LEFT PANEL (STATUS & ACTIONS) -->
+<aside class="w-[28%] flex flex-col gap-panel-gap overflow-y-auto">
+<!-- Status Badge -->
+<div class="panel-glass rounded-lg overflow-hidden border-none shadow-2xl relative">
+<div class="absolute inset-0 bg-industrial-red/10"></div>
+<div class="relative p-8 flex flex-col items-center justify-center border-b border-industrial-red/20">
+<span class="font-display-lg text-industrial-red font-black text-[72px] leading-none mb-2 tracking-tighter">FAIL</span>
+<span class="font-label-caps text-industrial-red/70 uppercase tracking-[0.4em] text-[10px]">Critical System Fault</span>
+</div>
+<div class="p-6 inner-panel-gradient">
+<div class="font-label-caps text-on-surface-variant mb-3">CURRENT DIAGNOSIS</div>
+<div class="font-headline-md text-white/90 uppercase text-[20px] leading-tight">Zone 2 — Charge-air Manifold leakage</div>
+<div class="mt-8">
+<div class="flex justify-between items-end mb-3">
+<span class="font-label-caps text-on-surface-variant">CONFIDENCE INTERVAL</span>
+<span class="font-body-fixed text-primary-container text-[18px] font-bold">94.2%</span>
+</div>
+<div class="h-1.5 bg-white/5 rounded-full overflow-hidden">
+<div class="h-full bg-primary-container shadow-[0_0_10px_rgba(255,209,0,0.3)]" style="width: 94.2%"></div>
+</div>
+</div>
+</div>
+</div>
+<!-- Recommended Action -->
+<div class="panel-glass p-6 rounded-lg border-l-4 border-primary-container">
+<div class="font-label-caps text-primary-container mb-3 tracking-widest">PROTOCOL ADVISORY</div>
+<p class="font-body-std text-on-surface/80 text-[14px] leading-relaxed font-light">
+                Inspect <span class="text-white font-medium">Charge-air cooler seals</span> and manifold gaskets immediately. Significant pressure differential persistent in subsystem 02-B. 
+            </p>
+</div>
+<!-- Steady State Indicator -->
+<div class="panel-glass p-5 rounded-lg flex items-center justify-between">
+<div class="flex items-center gap-4">
+<div class="w-2.5 h-2.5 rounded-full bg-industrial-green/60 shadow-[0_0_8px_rgba(52,199,89,0.3)]"></div>
+<span class="font-label-caps text-white/70 uppercase tracking-widest text-[10px]">Steady State Validated</span>
+</div>
+<span class="material-symbols-outlined text-industrial-green/80 scale-90">verified</span>
+</div>
+<div class="mt-auto space-y-3">
+<div class="flex items-center justify-between panel-glass p-4 rounded-lg">
+<span class="font-label-caps text-white/60 uppercase tracking-widest">Injection Simulation</span>
+<button class="relative inline-flex h-5 w-10 items-center rounded-full bg-white/10 transition-colors" id="toggleLeak">
+<span class="inline-block h-3 w-3 translate-x-1 transform rounded-full bg-white/40 transition duration-200"></span>
+</button>
+</div>
+<button class="w-full panel-glass p-4 rounded-lg flex justify-between items-center font-label-caps text-white/60 uppercase tracking-widest hover:bg-white/5 transition-colors">
+                Advanced Parameters
+                <span class="material-symbols-outlined opacity-40">tune</span>
+</button>
+</div>
+</aside>
+<!-- CENTRE PANEL (VISUALIZATION) -->
+<section class="flex-1 flex flex-col gap-panel-gap">
+<div class="flex-1 panel-glass rounded-lg flex flex-col overflow-hidden">
+<div class="flex justify-between items-center p-6 border-b border-white/5">
+<div class="flex items-center gap-4">
+<div class="w-1 h-4 bg-primary-container"></div>
+<div class="font-label-caps text-white tracking-widest">ANOMALY SCORE ANALYSIS — REAL-TIME</div>
+</div>
+<div class="flex gap-6">
+<div class="flex items-center gap-2">
+<div class="w-2 h-2 rounded-full bg-industrial-red"></div>
+<span class="text-[9px] font-label-caps text-on-surface-variant uppercase tracking-widest">Critical Limit</span>
+</div>
+<div class="flex items-center gap-2">
+<div class="w-2 h-2 rounded-full bg-primary-container"></div>
+<span class="text-[9px] font-label-caps text-on-surface-variant uppercase tracking-widest">Z-Score Live</span>
+</div>
+</div>
+</div>
+<div class="flex-1 p-6 flex flex-col">
+<div class="flex-1 data-inlay-deep rounded-md relative overflow-hidden flex items-end">
+<!-- Subtle Grid -->
+<div class="absolute inset-0 pointer-events-none opacity-[0.03]" style="background-image: linear-gradient(rgba(255,255,255,0.5) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.5) 1px, transparent 1px); background-size: 50px 50px;"></div>
+<!-- Critical Threshold -->
+<div class="absolute w-full border-t border-dashed border-industrial-red/30 top-1/4 z-10 flex items-center">
+<span class="ml-auto mr-4 text-[9px] font-body-fixed text-industrial-red/50 uppercase">Threshold 3.5σ</span>
+</div>
+<svg class="w-full h-full relative z-20" preserveaspectratio="none" viewbox="0 0 1000 400">
+<defs>
+<lineargradient id="chartGradient" x1="0%" x2="0%" y1="0%" y2="100%">
+<stop offset="0%" stop-color="#ffd100" stop-opacity="0.1"></stop>
+<stop offset="100%" stop-color="#ffd100" stop-opacity="0"></stop>
+</lineargradient>
+</defs>
+<path d="M0,350 L50,340 L100,360 L150,330 L200,345 L250,320 L300,310 L350,335 L400,280 L450,220 L500,100 L550,80 L600,120 L650,90 L700,70 L750,110 L800,95 L850,115 L900,105 L950,130 L1000,140" fill="url(#chartGradient)" stroke="none"></path>
+<path d="M0,350 L50,340 L100,360 L150,330 L200,345 L250,320 L300,310 L350,335 L400,280 L450,220 L500,100 L550,80 L600,120 L650,90 L700,70 L750,110 L800,95 L850,115 L900,105 L950,130 L1000,140" fill="none" stroke="#ffd100" stroke-opacity="0.8" stroke-width="1.5"></path>
+<circle class="pulse-critical" cx="500" cy="100" fill="#FF3B30" r="4"></circle>
+<circle class="pulse-critical" cx="550" cy="80" fill="#FF3B30" r="4"></circle>
+<circle class="pulse-critical" cx="700" cy="70" fill="#FF3B30" r="4"></circle>
+</svg>
+<div class="absolute bottom-4 left-6 font-body-fixed text-[10px] text-on-surface-variant/40 uppercase tracking-widest">
+                        T-Minus 120s
+                    </div>
+<div class="absolute bottom-4 right-6 flex items-center gap-2">
+<div class="w-1 h-1 rounded-full bg-industrial-green animate-pulse"></div>
+<span class="font-body-fixed text-[10px] text-industrial-green/60 uppercase tracking-widest">Live Feed</span>
+</div>
+</div>
+</div>
+</div>
+<div class="h-56 panel-glass p-6 rounded-lg overflow-hidden">
+<div class="font-label-caps text-on-surface-variant/60 mb-6 tracking-widest">PROBABILITY DENSITY BY ZONE</div>
+<div class="space-y-4">
+<!-- Zone 1 -->
+<div class="flex items-center gap-6">
+<span class="w-20 font-label-caps text-[10px] text-white/40 tracking-widest">ZONE 01</span>
+<div class="flex-1 h-1 bg-white/5 rounded-full">
+<div class="h-full bg-white/10 w-[12%] rounded-full"></div>
+</div>
+<span class="w-12 font-body-fixed text-[10px] text-on-surface-variant text-right">12.0%</span>
+</div>
+<!-- Zone 2 - Highlighted -->
+<div class="flex items-center gap-6 py-2 px-3 rounded bg-white/5 border border-white/5">
+<span class="w-20 font-label-caps text-[10px] text-primary-container tracking-widest">ZONE 02</span>
+<div class="flex-1 h-1 bg-white/5 rounded-full">
+<div class="h-full bg-primary-container shadow-[0_0_8px_rgba(255,209,0,0.4)] w-[94.2%] rounded-full"></div>
+</div>
+<span class="w-12 font-body-fixed text-[11px] text-primary-container font-bold text-right">94.2%</span>
+</div>
+<!-- Zone 3 -->
+<div class="flex items-center gap-6">
+<span class="w-20 font-label-caps text-[10px] text-white/40 tracking-widest">ZONE 03</span>
+<div class="flex-1 h-1 bg-white/5 rounded-full">
+<div class="h-full bg-white/10 w-[4%] rounded-full"></div>
+</div>
+<span class="w-12 font-body-fixed text-[10px] text-on-surface-variant text-right">04.1%</span>
+</div>
+<!-- Zone 4 -->
+<div class="flex items-center gap-6">
+<span class="w-20 font-label-caps text-[10px] text-white/40 tracking-widest">ZONE 04</span>
+<div class="flex-1 h-1 bg-white/5 rounded-full">
+<div class="h-full bg-white/10 w-[8%] rounded-full"></div>
+</div>
+<span class="w-12 font-body-fixed text-[10px] text-on-surface-variant text-right">08.2%</span>
+</div>
+</div>
+</div>
+</section>
+<!-- RIGHT PANEL (METRICS) -->
+<aside class="w-[24%] flex flex-col gap-panel-gap overflow-hidden">
+<!-- Event Log -->
+<div class="flex-1 panel-glass rounded-lg flex flex-col overflow-hidden">
+<div class="p-5 border-b border-white/5 bg-black/20">
+<span class="font-label-caps text-white/80 tracking-[0.2em]">EVENT LOG</span>
+</div>
+<div class="flex-1 overflow-y-auto p-4 space-y-2">
+<div class="flex items-center justify-between p-3 border-b border-white/[0.03]">
+<span class="font-body-fixed text-[11px] text-on-surface-variant">14:22:15.01</span>
+<span class="text-[9px] font-label-caps text-industrial-green/70 tracking-widest">NOMINAL</span>
+</div>
+<div class="flex items-center justify-between p-3 border-b border-white/[0.03]">
+<span class="font-body-fixed text-[11px] text-on-surface-variant">14:22:18.42</span>
+<span class="text-[9px] font-label-caps text-yellow-500/70 tracking-widest">WARNING</span>
+</div>
+<div class="p-3 bg-industrial-red/10 border-l-2 border-industrial-red flex flex-col gap-1">
+<div class="flex items-center justify-between">
+<span class="font-body-fixed text-[11px] text-industrial-red font-bold">14:22:20.00</span>
+<span class="text-[9px] font-label-caps text-industrial-red tracking-widest font-black">CRITICAL</span>
+</div>
+<span class="text-[9px] text-industrial-red/70 uppercase">Threshold breach subsystem 02</span>
+</div>
+<div class="flex items-center justify-between p-3 border-b border-white/[0.03]">
+<span class="font-body-fixed text-[11px] text-on-surface-variant">14:22:22.58</span>
+<span class="text-[9px] font-label-caps text-industrial-red/50 tracking-widest">FAULT</span>
+</div>
+</div>
+</div>
+<!-- Sensor Data -->
+<div class="h-72 panel-glass rounded-lg flex flex-col overflow-hidden">
+<div class="p-5 border-b border-white/5 bg-black/20">
+<span class="font-label-caps text-white/80 tracking-[0.2em]">SENSORY TELEMETRY</span>
+</div>
+<div class="flex-1 grid grid-cols-2 p-1 gap-1">
+<div class="inner-panel-gradient p-4 flex flex-col justify-between">
+<div class="text-[9px] font-label-caps text-on-surface-variant uppercase tracking-widest">Rotation</div>
+<div class="flex items-baseline gap-1">
+<span class="font-metric-lg text-white text-[22px]">2100</span>
+<span class="text-[9px] text-on-surface-variant font-body-fixed">RPM</span>
+</div>
+</div>
+<div class="inner-panel-gradient p-4 flex flex-col justify-between">
+<div class="text-[9px] font-label-caps text-on-surface-variant uppercase tracking-widest">Air Flow</div>
+<div class="flex items-baseline gap-1">
+<span class="font-metric-lg text-primary-container text-[22px]">145.2</span>
+<span class="text-[9px] text-on-surface-variant font-body-fixed">G/S</span>
+</div>
+</div>
+<div class="inner-panel-gradient p-4 flex flex-col justify-between">
+<div class="text-[9px] font-label-caps text-on-surface-variant uppercase tracking-widest">Boost Pres.</div>
+<div class="flex items-baseline gap-1">
+<span class="font-metric-lg text-primary-container text-[22px]">32.1</span>
+<span class="text-[9px] text-on-surface-variant font-body-fixed">PSI</span>
+</div>
+</div>
+<div class="inner-panel-gradient p-4 flex flex-col justify-between">
+<div class="text-[9px] font-label-caps text-on-surface-variant uppercase tracking-widest">Manifold</div>
+<div class="flex items-baseline gap-1">
+<span class="font-metric-lg text-white text-[22px]">2.4</span>
+<span class="text-[9px] text-on-surface-variant font-body-fixed">BAR</span>
+</div>
+</div>
+<div class="inner-panel-gradient p-4 flex flex-col justify-between">
+<div class="text-[9px] font-label-caps text-on-surface-variant uppercase tracking-widest">Exhaust</div>
+<div class="flex items-baseline gap-1">
+<span class="font-metric-lg text-white text-[22px]">650</span>
+<span class="text-[9px] text-on-surface-variant font-body-fixed">°C</span>
+</div>
+</div>
+<div class="inner-panel-gradient p-4 flex flex-col justify-between">
+<div class="text-[9px] font-label-caps text-on-surface-variant uppercase tracking-widest">Turbo Sp.</div>
+<div class="flex items-baseline gap-1">
+<span class="font-metric-lg text-white text-[22px]">120</span>
+<span class="text-[9px] text-on-surface-variant font-body-fixed">KRPM</span>
+</div>
+</div>
+</div>
+</div>
+</aside>
+</main>
+<!-- FOOTER -->
+<footer class="h-10 flex items-center justify-between px-margin-desktop bg-[#050505] border-t border-white/5 z-50">
+<div class="font-body-fixed text-[9px] text-on-surface-variant/60 uppercase tracking-[0.2em] font-light">
+        © 2024 CATERPILLAR INC. | PROPRIETARY INDUSTRIAL DIAGNOSTICS SYSTEM
+    </div>
+<div class="flex gap-10 font-label-caps text-[9px] text-on-surface-variant/60 uppercase tracking-widest">
+<div class="flex items-center gap-2 group cursor-pointer">
+<div class="w-1.5 h-1.5 rounded-full bg-industrial-green opacity-50 group-hover:opacity-100 transition-opacity"></div>
+<span class="group-hover:text-white transition-colors">Core Systems: Nominal</span>
+</div>
+<span class="hover:text-white transition-colors cursor-pointer">Security Policy</span>
+<span class="hover:text-white transition-colors cursor-pointer">Technical Support</span>
+</div>
+</footer>
+<script>
+    // Micro-interaction for session timer
+    function updateTimer() {
+        const now = new Date();
+        const h = String(now.getHours()).padStart(2, '0');
+        const m = String(now.getMinutes()).padStart(2, '0');
+        const s = String(now.getSeconds()).padStart(2, '0');
+        const ms = String(now.getMilliseconds()).padStart(3, '0').slice(0,2);
+        document.getElementById('session-timer').textContent = `${h}:${m}:${s}.${ms}`;
+    }
+    setInterval(updateTimer, 80);
+
+    // Toggle leak interaction
+    const toggleBtn = document.getElementById('toggleLeak');
+    toggleBtn.addEventListener('click', () => {
+        const circle = toggleBtn.querySelector('span');
+        if (circle.classList.contains('translate-x-1')) {
+            circle.classList.replace('translate-x-1', 'translate-x-6');
+            circle.classList.replace('bg-white/40', 'bg-primary-container');
+            toggleBtn.classList.replace('bg-white/10', 'bg-primary-container/20');
+        } else {
+            circle.classList.replace('translate-x-6', 'translate-x-1');
+            circle.classList.replace('bg-primary-container', 'bg-white/40');
+            toggleBtn.classList.replace('bg-primary-container/20', 'bg-white/10');
+        }
+    });
+
+    // Atmospheric Micro-glitch Effect
+    setInterval(() => {
+        const glitchTargets = document.querySelectorAll('.pulse-critical');
+        glitchTargets.forEach(target => {
+            if(Math.random() > 0.98) {
+                target.style.opacity = '0';
+                setTimeout(() => target.style.opacity = '1', 100);
+            }
+        });
+    }, 150);
+</script>
+</body></html>

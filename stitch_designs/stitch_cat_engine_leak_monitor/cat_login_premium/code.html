@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>LeakGuard Industrial | Secure Access</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&amp;family=JetBrains+Mono:wght@400;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "error": "#ffb4ab",
+                        "on-secondary-fixed-variant": "#474746",
+                        "on-tertiary-fixed": "#001f23",
+                        "secondary-fixed": "#e4e2e1",
+                        "on-tertiary-fixed-variant": "#004f56",
+                        "on-surface-variant": "#d1c6ab",
+                        "on-primary-container": "#6f5a00",
+                        "secondary-fixed-dim": "#c8c6c5",
+                        "on-secondary-container": "#b6b5b4",
+                        "secondary": "#c8c6c5",
+                        "outline-variant": "#4d4632",
+                        "on-surface": "#ebe2cf",
+                        "on-secondary-fixed": "#1b1c1c",
+                        "surface-bright": "#3e392c",
+                        "primary-fixed": "#ffe07f",
+                        "inverse-on-surface": "#353024",
+                        "tertiary-container": "#0bebff",
+                        "primary": "#fff1ce",
+                        "tertiary": "#d0f9ff",
+                        "surface-tint": "#edc200",
+                        "on-error": "#690005",
+                        "tertiary-fixed": "#8df2ff",
+                        "surface-dim": "#171309",
+                        "primary-fixed-dim": "#edc200",
+                        "surface-variant": "#393428",
+                        "surface-container-low": "#1f1b10",
+                        "on-primary": "#3c2f00",
+                        "on-primary-fixed-variant": "#564500",
+                        "on-primary-fixed": "#231b00",
+                        "on-background": "#ebe2cf",
+                        "on-error-container": "#ffdad6",
+                        "surface": "#171309",
+                        "surface-container": "#231f14",
+                        "inverse-primary": "#725c00",
+                        "surface-container-lowest": "#110e05",
+                        "primary-container": "#ffd100",
+                        "on-secondary": "#303030",
+                        "surface-container-high": "#2e2a1e",
+                        "error-container": "#93000a",
+                        "background": "#171309",
+                        "on-tertiary": "#00363c",
+                        "tertiary-fixed-dim": "#00dbed",
+                        "surface-container-highest": "#393428",
+                        "outline": "#9a9077",
+                        "secondary-container": "#474746",
+                        "on-tertiary-container": "#006670",
+                        "inverse-surface": "#ebe2cf"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "margin-mobile": "16px",
+                        "panel-gap": "8px",
+                        "unit": "4px",
+                        "margin-desktop": "32px",
+                        "gutter": "16px"
+                    },
+                    "fontFamily": {
+                        "metric-lg": ["JetBrains Mono"],
+                        "label-caps": ["Inter"],
+                        "headline-md": ["Inter"],
+                        "body-std": ["Inter"],
+                        "body-fixed": ["JetBrains Mono"],
+                        "display-lg": ["Inter"]
+                    },
+                    "fontSize": {
+                        "metric-lg": ["32px", {"lineHeight": "1", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                        "label-caps": ["12px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "700"}],
+                        "headline-md": ["24px", {"lineHeight": "1.2", "fontWeight": "700"}],
+                        "body-std": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                        "body-fixed": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                        "display-lg": ["48px", {"lineHeight": "1.1", "letterSpacing": "-0.02em", "fontWeight": "700"}]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        
+        .cinematic-bg {
+            background: radial-gradient(circle at 50% 50%, #231f14 0%, #110e05 100%);
+        }
+
+        .glass-panel {
+            background: rgba(35, 31, 20, 0.6);
+            backdrop-filter: blur(24px);
+            border: 1px solid rgba(154, 144, 119, 0.2);
+        }
+
+        .industrial-glow:focus-within {
+            box-shadow: 0 0 0 1px #ffd100;
+        }
+
+        @keyframes scanline {
+            0% { transform: translateY(-100%); }
+            100% { transform: translateY(100%); }
+        }
+
+        .scanline {
+            width: 100%;
+            height: 2px;
+            background: linear-gradient(to right, transparent, #ffd100, transparent);
+            opacity: 0.1;
+            position: absolute;
+            animation: scanline 8s linear infinite;
+        }
+    </style>
+</head>
+<body class="bg-background text-on-background cinematic-bg min-h-screen flex flex-col font-body-std overflow-hidden selection:bg-primary-container selection:text-on-primary-fixed">
+<div class="fixed inset-0 pointer-events-none z-0">
+<div class="scanline"></div>
+<div class="absolute inset-0 opacity-[0.03]" style="background-image: url('https://www.transparenttextures.com/patterns/carbon-fibre.png');"></div>
+</div>
+<header class="fixed top-0 w-full z-50 flex justify-between items-center px-margin-desktop py-6 border-b border-outline-variant/30 bg-background/40 backdrop-blur-sm">
+<div class="flex items-center gap-unit">
+<span class="material-symbols-outlined text-primary-container" style="font-variation-settings: 'FILL' 1;">shield_with_heart</span>
+<span class="font-headline-md text-headline-md font-bold text-primary-container tracking-tighter uppercase">LeakGuard Industrial</span>
+</div>
+<div class="hidden md:flex items-center gap-6">
+<div class="flex items-center gap-2 px-3 py-1 bg-surface-container border border-outline-variant">
+<div class="w-2 h-2 rounded-full bg-primary-container animate-pulse"></div>
+<span class="font-label-caps text-label-caps text-on-surface-variant uppercase">System Online</span>
+</div>
+<span class="font-body-fixed text-body-fixed text-on-surface-variant">NODE: CN-H821</span>
+</div>
+</header>
+<main class="flex-grow flex items-center justify-center p-6 relative z-10">
+<div class="w-full max-w-[480px] space-y-panel-gap">
+<div class="glass-panel p-10 flex flex-col items-center">
+<div class="mb-10 group">
+<img alt="Caterpillar Logo" class="h-16 w-auto transition-transform duration-500 group-hover:scale-105" src="https://lh3.googleusercontent.com/aida/AP1WRLsf4t1p3hp0SCZ8TKVT0WXNQy6-DYk-HgnJN8cgrPQSDTe9W0IRoopY_WmHfqbzKo_7RW7PXNzqa-NJNuLAhs_9wHwahYJGt6Ca9aANObA3ZRezxp8nN8RU6N8tBvUZSz890eUdJRoiD3FImjqQCrivvGObGdSy2u6i9YstkN2QreNI0-3mtanxPTL8n7-V1PPnUqjtdZ-KaObGlCYefNVeD9DrGvg4Mg4TTXpVZzPabrvCawvXNm1IENk"/>
+</div>
+<div class="w-full space-y-6">
+<div class="text-center space-y-2 mb-8">
+<h1 class="font-headline-md text-headline-md text-on-surface uppercase tracking-widest">Operator Authorization</h1>
+<p class="font-label-caps text-label-caps text-on-surface-variant">Class III Heavy Machinery Telemetry Access</p>
+</div>
+<form class="space-y-6" onsubmit="event.preventDefault();">
+<div class="space-y-unit group">
+<label class="font-label-caps text-label-caps text-on-surface-variant uppercase ml-1">Operator ID</label>
+<div class="relative flex items-center bg-surface-container-lowest border border-outline-variant/50 focus-within:border-primary-container transition-all duration-200">
+<span class="material-symbols-outlined px-4 text-on-surface-variant group-focus-within:text-primary-container">badge</span>
+<input class="w-full bg-transparent border-none py-4 px-0 font-body-fixed text-body-fixed text-on-surface placeholder:text-outline-variant focus:ring-0" placeholder="EMP-XXXX-XXXX" type="text"/>
+</div>
+</div>
+<div class="space-y-unit group">
+<label class="font-label-caps text-label-caps text-on-surface-variant uppercase ml-1">Security Access Key</label>
+<div class="relative flex items-center bg-surface-container-lowest border border-outline-variant/50 focus-within:border-primary-container transition-all duration-200">
+<span class="material-symbols-outlined px-4 text-on-surface-variant group-focus-within:text-primary-container">vpn_key</span>
+<input class="w-full bg-transparent border-none py-4 px-0 font-body-fixed text-body-fixed text-on-surface placeholder:text-outline-variant focus:ring-0" placeholder="••••••••••••" type="password"/>
+</div>
+</div>
+<div class="pt-4">
+<button class="w-full bg-primary-container text-on-primary-fixed font-headline-md text-[18px] font-bold py-5 uppercase tracking-[0.2em] hover:bg-primary-fixed-dim active:scale-[0.98] transition-all duration-200 flex items-center justify-center gap-3" type="submit">
+<span>Login</span>
+<span class="material-symbols-outlined">login</span>
+</button>
+</div>
+</form>
+<div class="flex justify-between items-center pt-4 border-t border-outline-variant/30 mt-8">
+<a class="font-label-caps text-label-caps text-on-surface-variant hover:text-primary-container transition-colors uppercase" href="#">Forgot Access Key?</a>
+<a class="font-label-caps text-label-caps text-on-surface-variant hover:text-primary-container transition-colors uppercase" href="#">Contact Site Admin</a>
+</div>
+</div>
+</div>
+<div class="flex items-center gap-panel-gap">
+<div class="flex-grow glass-panel py-3 px-6 flex items-center gap-4">
+<span class="material-symbols-outlined text-primary-container text-[18px]" style="font-variation-settings: 'FILL' 1;">info</span>
+<span class="font-label-caps text-label-caps text-on-surface-variant uppercase">Secure Session: 256-Bit Encrypted</span>
+</div>
+<div class="glass-panel py-3 px-4 flex items-center gap-2">
+<span class="material-symbols-outlined text-on-surface-variant text-[18px]">language</span>
+<span class="font-label-caps text-label-caps text-on-surface-variant">EN-US</span>
+</div>
+</div>
+</div>
+</main>
+<footer class="w-full py-8 px-margin-desktop border-t border-outline-variant/30 flex flex-col md:flex-row justify-between items-center gap-6 bg-surface-container-lowest/50 backdrop-blur-sm">
+<div class="flex items-center gap-8">
+<div class="flex items-center gap-3">
+<div class="w-2 h-2 rounded-full bg-primary-container"></div>
+<span class="font-label-caps text-label-caps text-on-surface uppercase tracking-widest">CAT Confidential</span>
+</div>
+<p class="font-label-caps text-label-caps text-on-surface-variant uppercase">© 2024 LeakGuard Systems. Precision Engineered for Heavy Industry.</p>
+</div>
+<div class="flex items-center gap-12">
+<div class="flex flex-col items-end">
+<span class="font-label-caps text-[10px] text-on-surface-variant uppercase mb-1">Local Latency</span>
+<span class="font-body-fixed text-body-fixed text-primary-container">12ms</span>
+</div>
+<div class="flex flex-col items-end">
+<span class="font-label-caps text-[10px] text-on-surface-variant uppercase mb-1">Station ID</span>
+<span class="font-body-fixed text-body-fixed text-on-surface uppercase">HMI-UNIT-042</span>
+</div>
+<div class="flex gap-4">
+<span class="material-symbols-outlined text-on-surface-variant hover:text-primary-container cursor-pointer transition-colors">settings_input_component</span>
+<span class="material-symbols-outlined text-on-surface-variant hover:text-primary-container cursor-pointer transition-colors">help_outline</span>
+</div>
+</div>
+</footer>
+<script>
+        document.addEventListener('mousemove', (e) => {
+            const x = e.clientX / window.innerWidth;
+            const y = e.clientY / window.innerHeight;
+            document.body.style.background = `radial-gradient(circle at ${x * 100}% ${y * 100}%, #231f14 0%, #110e05 100%)`;
+        });
+
+        const inputs = document.querySelectorAll('input');
+        inputs.forEach(input => {
+            input.addEventListener('focus', () => {
+                input.parentElement.classList.add('industrial-glow');
+            });
+            input.addEventListener('blur', () => {
+                input.parentElement.classList.remove('industrial-glow');
+            });
+        });
+    </script>
+</body></html>
