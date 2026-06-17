@@ -377,3 +377,135 @@ generate_performance_report.py:
 
 - The stability buffer fills with 7 samples before inference starts; the log shows `buffering 1/7 … 7/7`. After switching to leak mode, 1–2 `unstable` messages are expected while the buffer flushes the mode-change transient, then detection resumes.
 - `CORS_ALLOW_ALL_ORIGINS = True` is development-only. For production, restrict to specific origins via `CORS_ALLOWED_ORIGINS`.
+
+---
+
+## Frontend Phase 2 — Stitch-Pixel-Faithful UI (2026-06-16)
+
+**Status:** Complete
+
+### What was built
+
+Three production-quality, self-contained HTML files based on Stitch design reference files. All Tailwind config, colours, fonts, spacing, and animation values are taken directly from the Stitch reference HTML — not from memory or assumption.
+
+- `frontend/index.html` — Landing/product page.
+  - Base: `stitch_designs/.../cat_product_landing_page/code.html` (0px border-radius, #0A0A0A background, Industrial Command palette).
+  - Headline: "ENGINE LEAK DETECTION & ISOLATION"; hero CTA "Get Started" → login.html.
+  - 4 feature cards (grid-cols-4 at lg): 4-Zone Isolation / Physics+ML Hybrid / Go/No-Go Reports / On-Premise Only.
+  - Product showcase, 6-cell technical grid (01–06), Final CTA, footer.
+  - Nav links: Platform, Features, Specs, Dashboard → dashboard.html, Login → login.html.
+
+- `frontend/login.html` — Operator login and registration page.
+  - Base: `stitch_designs/.../cat_login_premium/code.html` (glass-panel, scanline animation, mouse-parallax background).
+  - Login / Register tabs (inline toggle, no separate page).
+  - Real POST `/user_auth/login/` and `/user_auth/signup/` with DRF token response.
+  - Token stored in `sessionStorage("cat_token")`, username in `sessionStorage("cat_username")`.
+  - Auto-redirect to dashboard.html if `cat_token` already exists on load.
+  - Error state: `bg-error-container border border-error` panel with message above the form.
+  - Show/hide password toggle (eye icon).
+
+- `frontend/dashboard.html` — Live monitoring dashboard.
+  - Base: `stitch_designs/.../cat_monitoring_dashboard_premium/code.html` + state files.
+  - Auth guard on load: redirects to login.html if no `cat_token` in sessionStorage.
+  - 3-column layout: sidebar 28% + centre flex-1 + right 24%.
+  - Real WebSocket: `ws://localhost:8000/ws/engine/?token=<token>` — registration → sensor loop → inference results.
+  - Canvas 2D z-score chart (60-point rolling, threshold dashed line at 6.3156, green/red dot coloring).
+  - JS sensor generator with Box-Muller Gaussian noise; 3 leak injection modes (charge_air/exhaust/precompressor) at severity 0.40.
+  - State transitions (no page reload): PASS (green) → WARNING (yellow advisory) → FAIL (red + `.fail-glow` + `.critical-text-blink`).
+  - Critical alert banner on `consecutive_fail_count ≥ 5`.
+  - Zone confidence bars (update from `window_result.zone_scores`, highlighted zone is top zone).
+  - 6-cell sensor telemetry grid (RPM, MAF, boost_pressure, MAP, EGT, turbo_speed).
+  - Event log: newest-top, 60 entries max, EXPORT → TSV download.
+  - Batch analysis modal: drag-and-drop CSV → POST `/api/session/` → Go/No-Go badge + summary.
+  - "TERMINATE SESSION" button: POST `/user_auth/logout/`, clear sessionStorage, redirect to login.html.
+
+### Design system fidelity notes
+
+- `index.html`: borderRadius DEFAULT "0px" (exact match to cat_product_landing_page config).
+- `login.html`: borderRadius DEFAULT "0.25rem" (exact match to cat_login_premium config, which uses slight radius).
+- `dashboard.html`: borderRadius DEFAULT "4px" (exact match to cat_monitoring_dashboard_premium config).
+- All colour tokens, font families, font sizes, and spacing from respective Tailwind configs.
+- `.panel-glass`, `.inner-panel-gradient`, `.data-inlay-deep`, `.pulse-critical`, `.fail-glow`, `.critical-text-blink`, `.scanline` — all CSS taken from reference files verbatim.
+
+---
+
+## Frontend Phase 3 — Vite + React Migration (2026-06-17)
+
+**Status:** Complete
+
+### What was built
+
+Full migration of the three self-contained HTML files into a proper Vite + React 18 project with Tailwind CSS 3 and React Router v6. All Stitch design tokens preserved exactly.
+
+**STEP 0 — Project scaffold**
+
+- Deleted old `frontend/{index,login,dashboard}.html`.
+- `npm create vite@latest . -- --template react` inside `frontend/`.
+- Installed `tailwindcss@3 postcss autoprefixer react-router-dom`.
+- `frontend/tailwind.config.js` — single Industrial Command token set from `DESIGN.md` + cat_monitoring_dashboard_premium palette (background `#0a0a0a`, industrial-red `#FF3B30`, industrial-green `#34C759`, borderRadius DEFAULT `0px`).
+- `frontend/vite.config.js` — proxy `/api` + `/user_auth` → `http://localhost:8000`; `/ws` → `ws://localhost:8000` with `ws: true`. Eliminates all CORS issues that existed with `file://` origin.
+- `frontend/index.html` — Inter + JetBrains Mono + Material Symbols Outlined from Google Fonts; `<div id="root">`.
+
+**STEP 1–2 — API service layer + custom hooks**
+
+- `src/api/client.js` — `apiFetch`: reads token from sessionStorage, sets `Authorization: Token <tok>` header, redirects to `/login` on 401.
+- `src/api/auth.js` — login, signup, logout using relative paths (proxy-routed).
+- `src/api/session.js` — `analyzeSession`: raw `fetch` with `FormData` (no Content-Type; browser sets multipart boundary). `singlePredict`: JSON POST.
+- `src/api/websocket.js` — `createEngineSocket(token, handlers)`: connects to `ws://localhost:8000/ws/engine/?token=<token>` directly (not through Vite proxy; TokenAuthMiddleware on Django side reads the query param).
+- `src/hooks/useAuth.js` — `getToken`, `isAuthenticated`, login (sessionStorage write), logout (API call + clear + navigate).
+- `src/hooks/useEngineWebSocket.js` — `connect()` sends engine registration on WS open; starts 500ms interval reading `leakModeRef`/`leakTypeRef` (avoids stale closures); `onMessageRef.current = onMessage` kept in sync on every render; `disconnect()` stops interval + closes WS.
+
+**STEP 3 — Sensor generator + constants**
+
+- `src/lib/sensorGenerator.js` — Box-Muller Gaussian noise; BASELINES from `test_api.py _VALID_PAYLOAD` (confirmed to produce healthy PASS); NOISE σ values below stability gate limits; 3 leak modes at severity 0.40.
+- `src/lib/constants.js` — `ANOMALY_THRESHOLD=6.3156`, `SENSOR_COLS` array, `ZONE_LABELS`, `ZONE_LABELS_LONG`, `RECOMMENDED_ACTIONS`.
+
+**STEP 4 — Layout components**
+
+- `src/components/layout/Header.jsx` — 80ms session timer; WS status pill (dot + label colour by wsState prop: connected=green, error=red, else pulse); flag badge (CRITICAL FAIL blinking / WARNING amber pulse / NOMINAL green); TERMINATE SESSION button.
+- `src/components/layout/Sidebar.jsx` — 5 NAV items; engine model input; leak injection toggle (translate-x CSS); 3 leak type buttons shown when mode=leak; START/STOP buttons; EMERGENCY STOP full-width red.
+- `src/components/layout/Footer.jsx` — WS state dot + "Core Systems: Nominal/Error/Initialising" text.
+
+**STEP 5 — Dashboard components**
+
+- `src/components/dashboard/StatusPanel.jsx` — FLAG badge (64px text, `critical-text-blink` on FAIL); confidence bar (visible on WARN/FAIL); 6 z-score cards (2×3 grid, `zColor()` threshold-relative colouring); Protocol Advisory panel (border-l-4 colour-coded); Steady State indicator with material icon.
+- `src/components/dashboard/AnomalyChart.jsx` — Canvas 2D; `ResizeObserver` on parent element; HiDPI (`canvas.width = offsetWidth * devicePixelRatio`); draws: bg `#050505`, grid lines, threshold dashed red line at `ANOMALY_THRESHOLD`, gradient fill, gold line, green/red dots per point.
+- `src/components/dashboard/ZoneConfidenceBars.jsx` — 4 zones; bar width = `score / max * 100%`; gold bar + label for detected zone; `transition-all duration-700`.
+- `src/components/dashboard/SensorGrid.jsx` — 6 cells (rpm, MAF, boost_pressure, MAP, EGT, turbo_speed); `inner-panel-gradient`; turbo_speed formatted as `v/1000` KRPM.
+- `src/components/dashboard/EventLog.jsx` — Events array (newest first); `entryStyle()` returns CSS classes by flag; EXPORT → `.tsv` download; 60-entry cap.
+- `src/components/dashboard/BatchModal.jsx` — Fixed overlay; drag-drop zone; hidden file input; `FormData` POST to `/api/session/`; Go/No-Go green/red display; DOWNLOAD REPORT JSON; error panel.
+
+**STEP 6 — Pages**
+
+- `src/pages/Landing.jsx` — cat_product_landing_page converted to JSX; React Router `<Link>` for CTAs; nav scroll opacity; hover card effects via useEffect; 4 feature cards; product showcase; 6-cell pipeline grid; final CTA.
+- `src/pages/Login.jsx` — cat_login_premium converted to JSX; `useState` for tab/username/password/email/loading/error/success; mouse parallax via useEffect; real auth via `api/auth.js`; show/hide password toggle; auto-redirect if token exists.
+- `src/pages/Dashboard.jsx` — auth guard; all state (flag, zone, zoneScores, confidence, isSteady, bufferState, zScores, chartPoints, events, sample, leakMode, leakType, engineModel, wsState, showCrit, critCount, testResult); `useEngineWebSocket` hook; `disconnectRef` pattern avoids stale closure when calling `disconnect()` from `onMessage`; full WS dispatch for all 7 message types; 3-column layout (StatusPanel / Chart+Grid+Log / ZoneBars+SessionInfo+ZoneKey); critical alert banner; test complete modal.
+
+**STEP 7 — Routing**
+
+- `src/App.jsx` — `BrowserRouter`, `PrivateRoute` (checks `sessionStorage.cat_token`, redirects to `/login`), routes for `/`, `/login`, `/dashboard`, catch-all `*` → `/`.
+
+**LAST STEP — Doc updates**
+
+- `docker-compose.yml` — comment block documenting React dev server on port 5173.
+- `README.md` — Docker quickstart updated; "Frontend (React + Vite)" subsection; route table; Project Structure updated with `frontend/src/`; Tech Stack updated.
+- `CLAUDE.md` — frontend file layout updated to full `src/` tree.
+- `docs/PHASE_LOG.md` — this entry.
+- `.gitignore` — `node_modules/` already present; covers `frontend/node_modules/`.
+
+### Key technical decisions
+
+- **Vite proxy vs CORS_ALLOW_ALL_ORIGINS**: With Vite proxy, all HTTP fetches use relative paths (no CORS). `CORS_ALLOW_ALL_ORIGINS = True` remains in settings for the Streamlit dashboard (which still calls the API directly), but the React frontend no longer depends on it.
+- **WebSocket not proxied**: Vite's WS proxy has edge cases. Instead, `createEngineSocket` connects directly to `ws://localhost:8000`. Django's `TokenAuthMiddleware` reads the `?token=` query param — same auth mechanism as the old `dashboard.html`.
+- **`disconnectRef` pattern**: `onMessage` is defined before the hook call (and thus before `disconnect` is in scope). Capturing `disconnect` directly in the `useCallback(fn, [])` closure would reference an uninitialized variable on first render. Solution: `disconnectRef.current = disconnect` updated after every render; `onMessage` calls `disconnectRef.current?.()`.
+- **`leakModeRef` / `leakTypeRef`**: 500ms interval closure would capture stale state. Refs updated via `setLeakConfig(mode, type)` so every interval tick reads the latest values.
+- **Single Tailwind config**: Three Stitch pages had slightly different radius tokens. Used `borderRadius: { DEFAULT: '0px' }` uniformly (from DESIGN.md instruction) with inline `style={{}}` for radius overrides where needed.
+
+### Verification
+
+```
+npm run dev:   Vite dev server starts at http://localhost:5173
+App.jsx:       BrowserRouter routes resolve (/ /login /dashboard)
+All pages:     JSX compiles without errors
+WS hook:       Connects to ws://localhost:8000/ws/engine/?token= with valid token
+```

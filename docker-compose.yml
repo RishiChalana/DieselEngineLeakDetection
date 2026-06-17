@@ -29,3 +29,8 @@ services:
       - "8501:8501"
     depends_on:
       - backend
+
+  # React frontend — Vite dev server (run manually, not containerised)
+  # cd frontend && npm install && npm run dev → http://localhost:5173
+  # Vite proxies /api and /user_auth to http://localhost:8000 (no CORS config needed)
+  # WebSocket connects directly: ws://localhost:8000/ws/engine/?token=<tok>

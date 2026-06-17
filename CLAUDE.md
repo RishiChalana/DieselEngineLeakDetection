@@ -52,7 +52,44 @@ DieselEngineLeakDetection/
 ├── tests/                               pytest suite: conftest.py + test_ml_pipeline.py + test_api.py
 ├── scripts/                             validate_zone_isolation.py + generate_performance_report.py
 ├── docs/                                Architecture, ML decisions, API reference, phase log, MODEL_PERFORMANCE.md
-├── frontend/index.html                  Self-contained browser UI (login → WebSocket session)
+├── frontend/                            Vite + React 18 frontend (cd frontend && npm install && npm run dev → :5173)
+│   ├── index.html                       Vite root HTML — Inter + JetBrains Mono + Material Symbols from Google Fonts
+│   ├── package.json                     React 18 + react-router-dom@6 + Vite 5
+│   ├── vite.config.js                   Proxy: /api + /user_auth → :8000; /ws → ws://localhost:8000 (ws:true)
+│   ├── tailwind.config.js               Industrial Command design tokens (exact Stitch values; borderRadius DEFAULT 0px)
+│   ├── postcss.config.js                tailwindcss + autoprefixer
+│   └── src/
+│       ├── main.jsx                     ReactDOM.createRoot + StrictMode
+│       ├── App.jsx                      BrowserRouter, PrivateRoute (sessionStorage.cat_token), Routes
+│       ├── index.css                    Animations (scanline, fail-pulse, blink, pulse-red-soft, draw) + panel primitives
+│       ├── lib/
+│       │   ├── constants.js             ANOMALY_THRESHOLD=6.3156, SENSOR_COLS, ZONE_LABELS, RECOMMENDED_ACTIONS
+│       │   └── sensorGenerator.js       Box-Muller noise; BASELINES from _VALID_PAYLOAD; 3 leak modes at severity 0.40
+│       ├── api/
+│       │   ├── client.js                apiFetch: Token header from sessionStorage; 401 → redirect /login
+│       │   ├── auth.js                  login, signup, logout (relative paths, proxy-routed)
+│       │   ├── session.js               analyzeSession (FormData, no Content-Type); singlePredict (JSON)
+│       │   └── websocket.js             createEngineSocket: ws://localhost:8000/ws/engine/?token= (direct, not proxied)
+│       ├── hooks/
+│       │   ├── useAuth.js               getToken, isAuthenticated, login (sessionStorage), logout (API + navigate)
+│       │   └── useEngineWebSocket.js    connect/disconnect; 500ms interval; leakModeRef/leakTypeRef; onMessageRef/onSampleRef
+│       ├── components/
+│       │   ├── layout/
+│       │   │   ├── Header.jsx           80ms session timer; WS pill; flag badge; TERMINATE SESSION
+│       │   │   ├── Sidebar.jsx          NAV items; engine input; leak toggle+type; START/STOP; EMERGENCY STOP
+│       │   │   └── Footer.jsx           WS state dot + "Core Systems" text
+│       │   └── dashboard/
+│       │       ├── StatusPanel.jsx      FLAG (64px, blink on FAIL); confidence bar; 6 z-score cards; advisory; steady-state
+│       │       ├── AnomalyChart.jsx     Canvas 2D; HiDPI; ResizeObserver; threshold dashed line; green/red dots
+│       │       ├── ZoneConfidenceBars.jsx  4 zones; bar width = score/max; gold highlight for detectedZone; duration-700
+│       │       ├── SensorGrid.jsx       6 cells 2×3 (rpm, MAF, boost_pressure, MAP, EGT, turbo_speed/1000 KRPM)
+│       │       ├── EventLog.jsx         Newest-first; entryStyle by flag; EXPORT TSV; 60-entry cap
+│       │       └── BatchModal.jsx       Drag-drop; FormData POST /api/session/; Go/No-Go; DOWNLOAD REPORT JSON
+│       └── pages/
+│           ├── Landing.jsx              cat_product_landing_page → JSX; React Router Links; nav scroll; hover cards
+│           ├── Login.jsx                cat_login_premium → JSX; tab state; mouse parallax; real auth; show/hide pw
+│           └── Dashboard.jsx            Auth guard; full state; useEngineWebSocket; disconnectRef pattern; 3-col layout;
+│                                        all 7 WS message types; critical alert banner; test-complete modal
 ├── Dockerfile                           Backend ASGI image
 ├── Dockerfile.streamlit                 Dashboard image
 ├── docker-compose.yml                   Backend + dashboard services (frontend volume mounted)
@@ -123,6 +160,9 @@ The original Signup view called `make_password(data['password'])` before passing
 | 3 | Complete | MAF AE fix, threshold unification, User.history, SteadyStateDetector, ZoneClassifier, predict() verdict |
 | 4 | Complete | Zone isolation diagnostic, physics override fixes (turbo/boost discriminators), consumer escalation cadence, session_analysis app (POST /api/session/), SessionReportGenerator, Streamlit 4-tab dashboard overhaul |
 | 5 | Complete | Real pytest test suite (41 pass, 0 fail), performance report script (F1=1.000 on held-out synthetic), Dockerfile + docker-compose, README rewrite |
+| Frontend 1 | Complete | Self-contained HTML frontend (CORS + TokenAuthMiddleware) |
+| Frontend 2 | Complete | Stitch-pixel-faithful 3-file HTML UI (cat_product_landing_page, cat_login_premium, cat_monitoring_dashboard_premium) |
+| Frontend 3 | Complete | Vite + React 18 migration — full src/ tree, Tailwind CSS 3, React Router v6, 6 dashboard components, 3 pages |
 
 ---
 

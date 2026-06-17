@@ -121,7 +121,10 @@ cd DieselEngineLeakDetection
 docker compose up
 # Backend API:  http://localhost:8000
 # Dashboard:    http://localhost:8501
-# Frontend:     open frontend/index.html in Chrome/Safari
+
+# React frontend (Vite dev server — run separately):
+cd frontend && npm install && npm run dev
+# Frontend:     http://localhost:5173
 ```
 
 ### Local development
@@ -141,11 +144,24 @@ daphne -p 8000 diesel_engine_predictor.asgi:application
 
 # In another terminal (from project root):
 streamlit run engine_simulator/app.py
-
-# Frontend — no build step required:
-open frontend/index.html          # macOS
-# or double-click frontend/index.html in Finder / Explorer
 ```
+
+### Frontend (React + Vite)
+
+```bash
+cd frontend
+npm install
+npm run dev   # http://localhost:5173
+```
+
+Vite proxies `/api` and `/user_auth` to `http://localhost:8000` (CORS-free).
+WebSocket connects directly to `ws://localhost:8000/ws/engine/?token=<tok>`.
+
+| Route | Page |
+|-------|------|
+| `/` | Landing — product overview, feature cards |
+| `/login` | Login / Register — DRF token auth |
+| `/dashboard` | Live monitoring dashboard (auth-guarded) |
 
 ---
 
@@ -199,6 +215,16 @@ DieselEngineLeakDetection/
 ├── scripts/
 │   ├── validate_zone_isolation.py     Zone discrimination table (Part A diagnostic)
 │   └── generate_performance_report.py Held-out eval → docs/MODEL_PERFORMANCE.md
+├── frontend/                          Vite + React 18 frontend
+│   ├── src/
+│   │   ├── pages/                     Landing.jsx · Login.jsx · Dashboard.jsx
+│   │   ├── components/layout/         Header · Sidebar · Footer
+│   │   ├── components/dashboard/      StatusPanel · AnomalyChart · ZoneConfidenceBars · SensorGrid · EventLog · BatchModal
+│   │   ├── hooks/                     useAuth · useEngineWebSocket
+│   │   ├── api/                       client · auth · session · websocket
+│   │   └── lib/                       constants · sensorGenerator
+│   ├── vite.config.js                 Vite proxy: /api + /user_auth → :8000; /ws → ws://localhost:8000
+│   └── tailwind.config.js             Industrial Command design tokens (exact Stitch values)
 ├── tests/                             pytest suite (ML pipeline + API integration)
 ├── docs/                              Architecture, ML decisions, API reference
 ├── Dockerfile                         Backend ASGI image
@@ -210,5 +236,6 @@ DieselEngineLeakDetection/
 
 ## Tech Stack
 
-Python 3.12 · Django 6.0 · Django Channels · TensorFlow/Keras 3.14.1 ·
-scikit-learn 1.7 · Streamlit · Plotly · pytest · Docker
+**Backend:** Python 3.12 · Django 6.0 · Django Channels · TensorFlow/Keras 3.14.1 · scikit-learn 1.7 · Streamlit · Plotly · pytest · Docker
+
+**Frontend:** React 18 · Vite · Tailwind CSS 3 · React Router v6

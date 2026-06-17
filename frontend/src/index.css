@@ -1,0 +1,122 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Global ──────────────────────────────────────────────────────────────── */
+* { box-sizing: border-box; }
+
+body {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.material-symbols-outlined {
+  font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 20;
+  vertical-align: middle;
+}
+
+/* ── Custom scrollbar ────────────────────────────────────────────────────── */
+::-webkit-scrollbar       { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #444; border-radius: 10px; }
+::-webkit-scrollbar-thumb:hover { background: #ffd100; }
+
+/* ── Panel primitives (from cat_monitoring_dashboard_premium) ────────────── */
+.panel-glass {
+  background: linear-gradient(145deg, rgba(30,30,30,0.4) 0%, rgba(10,10,10,0.6) 100%);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255,255,255,0.05);
+  box-shadow: 0 4px 24px -1px rgba(0,0,0,0.4);
+}
+
+.inner-panel-gradient {
+  background: linear-gradient(180deg, #161616 0%, #0d0d0d 100%);
+  border: 1px solid rgba(255,255,255,0.03);
+}
+
+.data-inlay-deep {
+  background: #050505;
+  border: 1px solid rgba(255,255,255,0.02);
+}
+
+/* ── Landing-page primitives (from cat_product_landing_page) ─────────────── */
+.industrial-border { border: 1px solid #2A2A2A; }
+.heavy-shadow      { box-shadow: 0 20px 50px rgba(0,0,0,0.8); }
+.hero-gradient     {
+  background: linear-gradient(to right, rgba(10,10,10,1) 30%, rgba(10,10,10,0.4) 100%);
+}
+
+/* ── Login-page primitives (from cat_login_premium) ─────────────────────── */
+.cinematic-bg {
+  background: radial-gradient(circle at 50% 50%, #231f14 0%, #110e05 100%);
+}
+
+.glass-panel {
+  background: rgba(35,31,20,0.6);
+  backdrop-filter: blur(24px);
+  border: 1px solid rgba(154,144,119,0.2);
+}
+
+.industrial-glow:focus-within { box-shadow: 0 0 0 1px #ffd100; }
+
+.tab-active {
+  background: rgba(255,209,0,0.1);
+  border-bottom: 2px solid #ffd100;
+  color: #ffd100;
+}
+
+.tab-inactive {
+  border-bottom: 2px solid transparent;
+  color: #d1c6ab;
+}
+
+.tab-inactive:hover { color: #ebe2cf; }
+
+/* ── Scanline (cat_login_premium) ────────────────────────────────────────── */
+@keyframes scanline {
+  0%   { transform: translateY(-100%); }
+  100% { transform: translateY(100%); }
+}
+.scanline {
+  width: 100%;
+  height: 2px;
+  background: linear-gradient(to right, transparent, #ffd100, transparent);
+  opacity: 0.1;
+  position: absolute;
+  animation: scanline 8s linear infinite;
+}
+
+/* ── FAIL glow (cat_dashboard_state_fail) ────────────────────────────────── */
+@keyframes fail-pulse {
+  0%   { box-shadow: inset 0 0 0px  #93000a; }
+  50%  { box-shadow: inset 0 0 20px #93000a; }
+  100% { box-shadow: inset 0 0 0px  #93000a; }
+}
+.fail-glow { animation: fail-pulse 1.5s infinite ease-in-out; }
+
+/* ── Critical text blink (cat_dashboard_state_fail) ─────────────────────── */
+@keyframes blink { 50% { opacity: 0; } }
+.critical-text-blink { animation: blink 0.8s infinite step-end; }
+
+/* ── Pulse for critical dot (cat_monitoring_dashboard_premium) ───────────── */
+@keyframes pulse-red-soft {
+  0%, 100% { opacity: 0.8; transform: scale(1); }
+  50%       { opacity: 0.4; transform: scale(1.2); }
+}
+.pulse-critical { animation: pulse-red-soft 2s ease-in-out infinite; }
+
+/* ── Chart draw animation (cat_dashboard_state_fail) ────────────────────── */
+@keyframes draw {
+  to { stroke-dashoffset: 0; }
+}
+.chart-spike {
+  stroke-dasharray: 1000;
+  stroke-dashoffset: 1000;
+  animation: draw 2s forwards;
+}
+
+/* ── Modal backdrop ──────────────────────────────────────────────────────── */
+.modal-backdrop {
+  background: rgba(0,0,0,0.85);
+  backdrop-filter: blur(4px);
+}
