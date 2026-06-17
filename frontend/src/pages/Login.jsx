@@ -240,7 +240,7 @@ export default function Login() {
             <div className="w-2 h-2 rounded-full bg-primary-container" />
             <span className="font-label-caps text-label-caps text-on-surface uppercase tracking-widest">CAT Confidential</span>
           </div>
-          <p className="font-label-caps text-label-caps text-on-surface-variant uppercase">© 2024 LeakGuard Systems. Precision Engineered for Heavy Industry.</p>
+          <p className="font-label-caps text-label-caps text-on-surface-variant uppercase">© {new Date().getFullYear()} LeakGuard Systems. Precision Engineered for Heavy Industry.</p>
         </div>
         <div className="flex items-center gap-12">
           <div className="flex flex-col items-end">
