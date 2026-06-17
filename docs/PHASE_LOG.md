@@ -509,3 +509,66 @@ App.jsx:       BrowserRouter routes resolve (/ /login /dashboard)
 All pages:     JSX compiles without errors
 WS hook:       Connects to ws://localhost:8000/ws/engine/?token= with valid token
 ```
+
+---
+
+## Frontend Bugfix Pass (2026-06-17)
+
+**Status:** Complete
+
+### Bug 1 — Landing nav links don't scroll
+
+**Root cause:** All four nav links used `href="#"`. No section in Landing.jsx had an `id` attribute. Every click reloaded the page hash to `#` and scrolled to the top without targeting any section.
+
+**Fix:** Added `id="features"` to the feature cards section, `id="platform"` to the product showcase section, `id="specs"` to the technical grid section. Updated nav hrefs to `href="#features"`, `href="#platform"`, `href="#specs"`. Added `html { scroll-behavior: smooth; }` to `index.css`.
+
+---
+
+### Bug 2 — Anomaly chart only showed threshold line, no data line
+
+**Root cause (primary):** `Dashboard.jsx:256` called `<AnomalyChart chartPoints={chartPoints} />` but `AnomalyChart.jsx:7` destructures `{ points }`. The prop `points` was always `undefined`. The guard `if (!pts || pts.length < 2) return` at line 57 fired on every render, so no data line, gradient, or dots were ever drawn. Only the threshold line (hardcoded unconditionally before the guard) appeared.
+
+**Root cause (secondary):** Dots used `pt.isLeak` to pick red vs green, but Dashboard creates points as `{ z, pass }`. `pt.isLeak` was always `undefined` (falsy) so all dots were green even on anomalous samples.
+
+**Fix:** Changed `<AnomalyChart chartPoints={…} />` to `<AnomalyChart points={…} />` in Dashboard.jsx. Changed `pt.isLeak` to `!pt.pass` in AnomalyChart.jsx.
+
+---
+
+### Bug 3 — FAIL state showed "No Leak Detected" in the completion modal
+
+**Root cause:** `consumer.py:372` sends `"leak_detected": bool` in `test_complete`. Dashboard.jsx read `testResult.outcome === 'LEAK_CONFIRMED'` — the field `outcome` doesn't exist in the payload (verified in both `consumer.py` and `API_REFERENCE.md`). `testResult.outcome` was always `undefined`, making `undefined === 'LEAK_CONFIRMED'` always `false`, so the modal always rendered the green "No Leak Detected" path regardless of actual result.
+
+**Fix:** Replaced all four `testResult.outcome === 'LEAK_CONFIRMED'` expressions with `testResult.leak_detected === true`. Also fixed the event log message which used `msg.outcome` (replaced with a conditional on `msg.leak_detected`).
+
+**Additional field-name mismatches found while tracing:**
+
+- `buffering` handler read `msg.samples_collected` but consumer sends `msg.buffered` (consumer.py:158 / API_REFERENCE.md). Fixed to `msg.buffered`.
+- `critical_alert` handler read `msg.consecutive_fail_count` but consumer sends `msg.consecutive_fail_windows` (consumer.py:317). Fixed to `msg.consecutive_fail_windows`.
+- `sample_result` handler called `setIsSteady(msg.is_steady_state || false)` but `sample_result` does NOT include `is_steady_state` (consumer.py:196-210 confirms it). Removed. Added `setIsSteady(msg.is_steady_state || false)` to `window_result` handler instead (which DOES send this field, consumer.py:302).
+
+---
+
+### Bug 4 — Footer year said 2024
+
+**Root cause:** `Footer.jsx` hardcoded `© 2024 CATERPILLAR INC.` and `Landing.jsx` hardcoded `© 2024 Caterpillar Hackathon.`
+
+**Fix:** Replaced both with `© {new Date().getFullYear()} …`.
+
+---
+
+### Bug 5 — Sidebar nav (Telemetry, Diagnostics, History) did nothing on click
+
+**Root cause:** `Sidebar.jsx` NAV array only set `onClick: 'batch'` on BATCH ANALYSIS. The other four items had no `onClick` handler at all. Active state was a hardcoded boolean in the array constant, never updated. No `id` attributes existed on any dashboard panel.
+
+**Fix:** Replaced the hardcoded `active` field with local `useState('DASHBOARD')` in Sidebar. Added `target` panel IDs to each NAV item. Added `handleNavClick()` that sets active state and calls `document.getElementById(target)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })`. Updated the active class to use `activeNav === item.label`. Added `id="panel-status"`, `id="panel-zones"` to the left/right asides in Dashboard.jsx; added zero-height anchor spans `id="panel-chart"` and `id="panel-log"` before the corresponding components in the center column.
+
+### Verification
+
+```
+npm run build:  ✓ 53 modules, 0 errors, 612ms
+BUG 1:  href="#features" / "#platform" / "#specs" → correct sections; html scroll-behavior smooth
+BUG 2:  AnomalyChart now receives points prop; draws gradient + line + red/green dots
+BUG 3:  test_complete reads leak_detected (bool); LEAK → "Leak Confirmed" red, NO LEAK → "No Leak Detected" green
+BUG 4:  Both footers render new Date().getFullYear() = 2026
+BUG 5:  All 4 nav items call scrollIntoView to their panel ID; active highlight follows clicks
+```

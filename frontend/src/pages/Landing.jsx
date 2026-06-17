@@ -45,9 +45,9 @@ export default function Landing() {
           LeakGuard Industrial
         </div>
         <div className="hidden md:flex items-center space-x-8">
-          <a className="font-label-caps text-label-caps text-primary-container font-bold border-b-2 border-primary-container pb-1 uppercase" href="#">Platform</a>
-          <a className="font-label-caps text-label-caps text-on-surface-variant hover:text-on-surface transition-colors uppercase" href="#">Features</a>
-          <a className="font-label-caps text-label-caps text-on-surface-variant hover:text-on-surface transition-colors uppercase" href="#">Specs</a>
+          <a className="font-label-caps text-label-caps text-primary-container font-bold border-b-2 border-primary-container pb-1 uppercase" href="#platform">Platform</a>
+          <a className="font-label-caps text-label-caps text-on-surface-variant hover:text-on-surface transition-colors uppercase" href="#features">Features</a>
+          <a className="font-label-caps text-label-caps text-on-surface-variant hover:text-on-surface transition-colors uppercase" href="#specs">Specs</a>
           <Link className="font-label-caps text-label-caps text-on-surface-variant hover:text-on-surface transition-colors uppercase" to="/dashboard">Dashboard</Link>
         </div>
         <Link
@@ -100,7 +100,7 @@ export default function Landing() {
       </section>
 
       {/* ── Feature cards ────────────────────────────────────────────────── */}
-      <section style={{ backgroundColor: '#110e05' }} className="py-24 px-margin-desktop border-y border-outline-variant">
+      <section id="features" style={{ backgroundColor: '#110e05' }} className="py-24 px-margin-desktop border-y border-outline-variant">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
           {[
             { icon: 'hub',      title: '4-Zone Isolation',   desc: 'Localises leaks to one of four subsystem zones — pre-compressor intake, charge-air circuit, exhaust path, or test cell ducting.', arrow: 'Zone Details' },
@@ -127,7 +127,7 @@ export default function Landing() {
       </section>
 
       {/* ── Product showcase ──────────────────────────────────────────────── */}
-      <section className="py-24 px-margin-desktop overflow-hidden">
+      <section id="platform" className="py-24 px-margin-desktop overflow-hidden">
         <div className="flex flex-col lg:flex-row items-center gap-16">
           <div className="lg:w-1/2 relative">
             <div className="absolute -top-10 -left-10 w-40 h-40 border-t-2 border-l-2 border-primary-container opacity-20" />
@@ -175,7 +175,7 @@ export default function Landing() {
       </section>
 
       {/* ── Technical grid ────────────────────────────────────────────────── */}
-      <section style={{ backgroundColor: '#231f14' }} className="py-24 px-margin-desktop border-t border-outline-variant">
+      <section id="specs" style={{ backgroundColor: '#231f14' }} className="py-24 px-margin-desktop border-t border-outline-variant">
         <div className="mb-16 text-center">
           <h2 className="font-display-lg text-[40px] uppercase font-black tracking-tighter">Detection Pipeline</h2>
           <div style={{ width: '96px', height: '4px', backgroundColor: '#ffd100', margin: '16px auto 0' }} />
@@ -254,7 +254,7 @@ export default function Landing() {
             <a className="font-label-caps text-label-caps text-on-surface-variant hover:text-primary transition-colors uppercase" href="#">Architecture</a>
           </div>
           <div className="font-label-caps text-label-caps text-on-surface-variant uppercase text-right opacity-50">
-            © 2024 Caterpillar Hackathon. All Rights Reserved.
+            © {new Date().getFullYear()} Caterpillar Hackathon. All Rights Reserved.
           </div>
         </div>
       </footer>

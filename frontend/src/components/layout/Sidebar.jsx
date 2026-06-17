@@ -1,11 +1,11 @@
 import { useState } from 'react'
 
 const NAV = [
-  { icon: 'dashboard',             label: 'DASHBOARD',      active: true  },
-  { icon: 'analytics',             label: 'TELEMETRY',      active: false },
-  { icon: 'precision_manufacturing',label: 'DIAGNOSTICS',   active: false },
-  { icon: 'history',               label: 'HISTORY',        active: false },
-  { icon: 'upload_file',           label: 'BATCH ANALYSIS', active: false, onClick: 'batch' },
+  { icon: 'dashboard',              label: 'DASHBOARD',      target: 'panel-status' },
+  { icon: 'analytics',              label: 'TELEMETRY',      target: 'panel-chart'  },
+  { icon: 'precision_manufacturing', label: 'DIAGNOSTICS',   target: 'panel-zones'  },
+  { icon: 'history',                label: 'HISTORY',        target: 'panel-log'    },
+  { icon: 'upload_file',            label: 'BATCH ANALYSIS', target: 'batch'        },
 ]
 
 export default function Sidebar({
@@ -22,6 +22,17 @@ export default function Sidebar({
   onEngineTypeChange,
   onBatchOpen,
 }) {
+  const [activeNav, setActiveNav] = useState('DASHBOARD')
+
+  function handleNavClick(item) {
+    setActiveNav(item.label)
+    if (item.target === 'batch') {
+      onBatchOpen?.()
+    } else {
+      document.getElementById(item.target)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    }
+  }
+
   return (
     <aside className="flex flex-col h-full py-panel-gap bg-surface border-r border-outline w-64 shrink-0">
       {/* Header */}
@@ -40,9 +51,9 @@ export default function Sidebar({
         {NAV.map((item) => (
           <button
             key={item.label}
-            onClick={item.onClick === 'batch' ? onBatchOpen : undefined}
+            onClick={() => handleNavClick(item)}
             className={`w-full px-4 py-3 flex items-center gap-3 transition-all text-left ${
-              item.active
+              activeNav === item.label
                 ? 'bg-primary-container text-on-primary font-bold'
                 : 'text-on-surface-variant hover:text-primary-container hover:bg-surface-container-high'
             }`}

@@ -94,7 +94,7 @@ export default function AnomalyChart({ points }) {
       const i = startIdx + j
       ctx.beginPath()
       ctx.arc(ptX(i), ptY(pt.z), 2, 0, Math.PI * 2)
-      ctx.fillStyle = pt.isLeak ? '#FF3B30' : '#34C759'
+      ctx.fillStyle = !pt.pass ? '#FF3B30' : '#34C759'
       ctx.fill()
     })
   }
