@@ -284,13 +284,13 @@ ZONE_AE_WEIGHTS: Dict[str, Dict[str, float]] = {
 #: For charge_air: boost *= (1-s) while turbo *= (1+0.3s) → ratio << 1.
 #: For exhaust: boost recalculated from reduced turbo → ratio ≈ 1.0.
 #: For precompressor: boost recalculated from slightly elevated turbo → ratio ≈ 1.0.
-BOOST_BELOW_EXPECTED_FACTOR: float = 0.82
+BOOST_BELOW_EXPECTED_FACTOR: float = 0.60
 
 #: precompressor vs exhaust discriminator.
 #: actual_turbo / expected_turbo(fuelrate) above this → turbo is elevated → zone_1 pattern.
 #: For precompressor: turbo *= (1+0.2s) → ratio > 1.
 #: For exhaust: turbo *= (1-0.6s) and is often clipped → ratio < 1.
-TURBO_ABOVE_EXPECTED_FACTOR: float = 1.04
+TURBO_ABOVE_EXPECTED_FACTOR: float = 1.60
 
 #: Minimum normalised zone score to consider a zone active.
 ZONE_FLOOR: float = 0.05

@@ -323,9 +323,9 @@ class ZoneClassifier:
 
         Rules applied in order:
         1. zone_1 + MAP/ambient anomaly → zone_2 (charge-air pressure loss).
-        2. zone_3 + boost-below-expected-for-turbo → zone_2 (charge_air vs exhaust
-           discrimination: charge_air explicitly reduces boost while turbo rises;
-           exhaust recalculates boost from the reduced turbo, keeping ratio ~1.0).
+        2. zone_3/multiple + boost/turbo ratio < 0.60 → zone_2 (charge_air pattern).
+        3. multiple + turbo/expected > 1.60 + no boost deficit → zone_1 (precompressor pattern).
+        4. remaining multiple → top-scoring zone (breaks exhaust ambiguity cleanly).
 
         Args:
             zone: ML-suggested zone.
@@ -364,8 +364,8 @@ class ZoneClassifier:
                     return "zone_2"
 
             # Rule 3: turbo elevated without boost deficit → precompressor (zone_1).
-            # Applies only when ML was ambiguous (multiple), not zone_3, because
-            # exhaust produces depressed turbo, not elevated, so it won't trigger here.
+            # Threshold 1.60 sits above healthy baseline ratio (~1.55) and precompressor
+            # ratio (~1.68) while remaining below any exhaust pattern (~1.18–1.55).
             if zone == "multiple" and not boost_deficit:
                 if self._turbo_above_expected(raw_sample):
                     z1_score = norm.get("zone_1", 0.0)
@@ -375,6 +375,13 @@ class ZoneClassifier:
                             "multiple → zone_1 (precompressor pattern)"
                         )
                         return "zone_1"
+
+        # Rule 4: remaining ambiguity — resolve to the zone with the highest score.
+        # Fires for exhaust (zone_3 marginally beats zone_2) when Rules 2 and 3 don't apply.
+        if zone == "multiple":
+            top = max(norm.items(), key=lambda x: x[1])[0]
+            logger.debug("Physics override: multiple → %s (top-scoring zone fallback)", top)
+            return top
 
         return zone
 

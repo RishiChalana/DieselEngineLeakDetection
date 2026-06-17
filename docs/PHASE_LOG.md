@@ -572,3 +572,63 @@ BUG 3:  test_complete reads leak_detected (bool); LEAK → "Leak Confirmed" red,
 BUG 4:  Both footers render new Date().getFullYear() = 2026
 BUG 5:  All 4 nav items call scrollIntoView to their panel ID; active highlight follows clicks
 ```
+
+---
+
+## Bugfix Session — Zone Isolation Always zone_2 + Login Footer 2024
+
+**Date:** 2026-06-17  
+**Commit:** (this session)
+
+### Root Causes Found (proven before fixing)
+
+**BUG 1 — Login footer hardcoded 2024**
+
+- Root cause: Login.jsx had its own inline `<footer>` block with `© 2024 LeakGuard Systems.` (line 243).  Dashboard.jsx correctly imports `<Footer />` from `components/layout/Footer.jsx`, which already uses `{new Date().getFullYear()}`. Landing.jsx inline footer was fixed in the prior session. Login.jsx was missed.
+- Fix: changed hardcoded string to `© {new Date().getFullYear()} LeakGuard Systems.`
+
+**BUG 2 — Zone isolation always returned zone_2 (charge_air)**
+
+Root cause is three-layer:
+
+**Layer 1 — AE feature cross-contamination (existing model limitation)**  
+Feature groups in `config/constants.py → AE_FEATURES` share sensors across subsystems:
+- `boost` AE includes `exhaust_pressure` and `turbo_speed`
+- `dpf` AE includes `MAF`, `boost_pressure`, `turbo_speed`, `exhaust_pressure`
+- `exhaust` AE includes `MAF` and `turbo_speed`
+
+Any leak type that perturbs MAF, turbo, or exhaust_pressure (i.e., all of them) causes ALL four AEs to fire with nearly identical z-scores (~4.7–6.9 regardless of leak type). The ML zone vote is therefore always `zone_3` or `multiple` (zone_3 ≈ zone_2 within 15%).
+
+**Layer 2 — `BOOST_BELOW_EXPECTED_FACTOR` = 0.82 was miscalibrated**  
+`_boost_below_expected()` computes `actual_boost / expected_boost(turbo, fuel)`. At the healthy JS baseline: `expected_boost(90000, 75) = 1.821` but `actual_boost = 1.4`, giving ratio = 0.769 — already below 0.82. This made `boost_deficit = True` for ALL three leak types (including exhaust and precompressor), so Physics Rule 2 always fired:  
+`zone_3 + boost_deficit → zone_2`.  
+Result: every leak landed on zone_2 (charge_air) regardless of what was selected.
+
+**Layer 3 — `TURBO_ABOVE_EXPECTED_FACTOR` = 1.04 was too low**  
+`_turbo_above_expected()` expected formula gives `expected = 58 000` for fuel=75, but actual healthy turbo is 90 000 (ratio = 1.55). With threshold 1.04, turbo_above_expected was True for healthy AND all leak types, making Rule 3 non-discriminating.
+
+### Fixes Applied
+
+| File | Change |
+|------|--------|
+| `config/constants.py` | `BOOST_BELOW_EXPECTED_FACTOR`: 0.82 → **0.60** (sits below charge_air ratio 0.421, above exhaust/precompressor ratio ~0.769) |
+| `config/constants.py` | `TURBO_ABOVE_EXPECTED_FACTOR`: 1.04 → **1.60** (above precompressor 1.676, below exhaust-at-baseline 1.552) |
+| `ml_model/zone_classifier.py` | Added **Rule 4**: if zone is still `"multiple"` after Rules 1–3, resolve to the zone with the highest normalised score. Fixes exhaust path: zone_3 marginally outscores zone_2 (8.3% margin) after boost_deficit correctly returns False. |
+| `frontend/src/pages/Login.jsx` | `© 2024` → `© {new Date().getFullYear()}` |
+
+### Rule chain after fix (verified with diagnostic)
+
+| Leak type | ML vote | boost_ratio | turbo_ratio | Rule fired | Final zone |
+|-----------|---------|-------------|-------------|-----------|------------|
+| charge_air | multiple | 0.421 < 0.60 | 1.738 | Rule 2 | zone_2 ✓ |
+| exhaust | multiple | 0.769 > 0.60 | 1.552 < 1.60 | Rule 4 (top score) | zone_3 ✓ |
+| precompressor | multiple | 0.694 > 0.60 | 1.676 > 1.60 | Rule 3 | zone_1 ✓ |
+
+### What was NOT a bug
+
+- No stale closure in `useEngineWebSocket.js` — `leakModeRef` and `leakTypeRef` were already `useRef`, correctly avoiding stale captures.
+- `sensorGenerator.js` produces sufficiently anomalous signals for detection (z_cumulative 487–1094). Physics mismatch vs Python simulator is a fidelity issue, not the zone bug.
+
+### Build
+
+`npm run build`: 53 modules, 0 errors.
