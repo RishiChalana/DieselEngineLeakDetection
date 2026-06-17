@@ -59,7 +59,7 @@ export default function Dashboard() {
         break
 
       case 'buffering':
-        setBufState(`${msg.samples_collected}/${msg.required}`)
+        setBufState(`${msg.buffered}/${msg.required}`)
         break
 
       case 'unstable':
@@ -71,7 +71,6 @@ export default function Dashboard() {
         const z = msg.z_scores || {}
         setZScores(z)
         setConf(msg.confidence || 0)
-        setIsSteady(msg.is_steady_state || false)
         setBufState(null)
         const cum = z.cumulative ?? 0
         setChartPts((prev) => [...prev, { z: cum, pass: cum < 6.3156 }].slice(-60))
@@ -81,6 +80,7 @@ export default function Dashboard() {
       case 'window_result': {
         const wf = msg.flag || (msg.window_leak ? 'FAIL' : 'PASS')
         setFlag(wf)
+        setIsSteady(msg.is_steady_state || false)
         if (msg.window_leak && msg.zone) {
           setZone(msg.zone)
           if (msg.zone_scores) setZoneScores(msg.zone_scores)
@@ -92,10 +92,10 @@ export default function Dashboard() {
 
       case 'critical_alert':
         setFlag('FAIL')
-        setCritCount(msg.consecutive_fail_count)
+        setCritCount(msg.consecutive_fail_windows)
         setShowCrit(true)
         setEvents((prev) => [
-          { ts: tsNow(), flag: 'CRITICAL', message: `${msg.consecutive_fail_count} consecutive FAIL windows` },
+          { ts: tsNow(), flag: 'CRITICAL', message: `${msg.consecutive_fail_windows} consecutive FAIL windows` },
           ...prev,
         ].slice(0, 60))
         break
@@ -105,7 +105,7 @@ export default function Dashboard() {
         disconnectRef.current?.()
         setWsState('disconnected')
         setEvents((prev) => [
-          { ts: tsNow(), flag: msg.outcome === 'LEAK_CONFIRMED' ? 'FAIL' : 'PASS', message: `Session complete: ${msg.outcome}` },
+          { ts: tsNow(), flag: msg.leak_detected ? 'FAIL' : 'PASS', message: `Session complete: ${msg.leak_detected ? 'LEAK CONFIRMED' : 'NO LEAK'}` },
           ...prev,
         ].slice(0, 60))
         break
@@ -240,7 +240,7 @@ export default function Dashboard() {
           style={{ padding: '12px', gap: '12px', backgroundColor: '#070707' }}
         >
           {/* Left: Status panel */}
-          <aside className="w-[28%] flex flex-col gap-[12px] overflow-y-auto flex-shrink-0">
+          <aside id="panel-status" className="w-[28%] flex flex-col gap-[12px] overflow-y-auto flex-shrink-0">
             <StatusPanel
               flag={flag}
               zone={zone}
@@ -253,13 +253,15 @@ export default function Dashboard() {
 
           {/* Center: Chart + sensors + events */}
           <section className="flex-1 flex flex-col gap-[12px] min-w-0 overflow-hidden">
-            <AnomalyChart chartPoints={chartPoints} />
+            <span id="panel-chart" style={{ display: 'block', height: 0 }} />
+            <AnomalyChart points={chartPoints} />
             <SensorGrid sample={sample} />
+            <span id="panel-log" style={{ display: 'block', height: 0 }} />
             <EventLog events={events} />
           </section>
 
           {/* Right: Zone bars + session info + zone key */}
-          <aside className="w-[24%] flex flex-col gap-[12px] overflow-y-auto flex-shrink-0">
+          <aside id="panel-zones" className="w-[24%] flex flex-col gap-[12px] overflow-y-auto flex-shrink-0">
             <ZoneConfidenceBars zoneScores={zoneScores} detectedZone={zone} />
 
             {/* Session info */}
@@ -313,17 +315,17 @@ export default function Dashboard() {
               <span
                 className="material-symbols-outlined text-[64px] mb-2 block"
                 style={{
-                  color: testResult.outcome === 'LEAK_CONFIRMED' ? '#FF3B30' : '#34C759',
+                  color: testResult.leak_detected ? '#FF3B30' : '#34C759',
                   fontVariationSettings: "'FILL' 1",
                 }}
               >
-                {testResult.outcome === 'LEAK_CONFIRMED' ? 'warning' : 'check_circle'}
+                {testResult.leak_detected ? 'warning' : 'check_circle'}
               </span>
               <h2
                 className="font-display-lg font-black text-[28px] uppercase tracking-tighter mb-1"
-                style={{ color: testResult.outcome === 'LEAK_CONFIRMED' ? '#FF3B30' : '#34C759' }}
+                style={{ color: testResult.leak_detected ? '#FF3B30' : '#34C759' }}
               >
-                {testResult.outcome === 'LEAK_CONFIRMED' ? 'Leak Confirmed' : 'No Leak Detected'}
+                {testResult.leak_detected ? 'Leak Confirmed' : 'No Leak Detected'}
               </h2>
               {zone && (
                 <p className="font-label-caps text-[10px] text-on-surface-variant uppercase tracking-widest">
@@ -333,7 +335,7 @@ export default function Dashboard() {
             </div>
 
             <div className="inner-panel-gradient p-4 mb-6 text-[12px] text-on-surface/70 font-body-fixed leading-relaxed">
-              {testResult.outcome === 'LEAK_CONFIRMED'
+              {testResult.leak_detected
                 ? zone
                   ? `Leak isolated to ${zone.replace(/_/g, ' ')}. Immediate inspection recommended per zone protocol.`
                   : 'Sustained anomaly confirmed. Zone isolation inconclusive — full engine inspection recommended.'
