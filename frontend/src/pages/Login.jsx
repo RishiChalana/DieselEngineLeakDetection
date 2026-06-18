@@ -104,8 +104,7 @@ export default function Login() {
         style={{ backgroundColor: 'rgba(23,19,9,0.4)' }}
       >
         <div className="flex items-center gap-unit">
-          <span className="material-symbols-outlined text-primary-container" style={{ fontVariationSettings: "'FILL' 1" }}>shield_with_heart</span>
-          <span className="font-headline-md text-[20px] font-bold text-primary-container tracking-tighter uppercase">LeakGuard Industrial</span>
+          <img src="/logo-full.png" alt="LeakGuard Industrial" className="h-8" />
         </div>
         <div className="hidden md:flex items-center gap-6">
           <div className="flex items-center gap-2 px-3 py-1 bg-surface-container border border-outline-variant">
@@ -122,9 +121,8 @@ export default function Login() {
           <div className="glass-panel p-10 flex flex-col items-center">
 
             {/* Logo */}
-            <div className="mb-6 flex flex-col items-center gap-2">
-              <span className="material-symbols-outlined text-primary-container text-[48px]" style={{ fontVariationSettings: "'FILL' 1" }}>precision_manufacturing</span>
-              <span className="font-label-caps text-label-caps text-on-surface-variant uppercase tracking-widest">Diesel Engine Leak Detection</span>
+            <div className="mb-6 flex flex-col items-center">
+              <img src="/logo-full.png" alt="LeakGuard Industrial" className="h-12 mx-auto" />
             </div>
 
             {/* Tabs */}

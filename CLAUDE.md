@@ -90,9 +90,19 @@ DieselEngineLeakDetection/
 │           ├── Login.jsx                cat_login_premium → JSX; tab state; mouse parallax; real auth; show/hide pw
 │           └── Dashboard.jsx            Auth guard; full state; useEngineWebSocket; disconnectRef pattern; 3-col layout;
 │                                        all 7 WS message types; critical alert banner; test-complete modal
+├── frontend/
+│   ├── Dockerfile                       Multi-stage build: node:20-alpine npm ci → vite build → serve -s dist
+│   ├── .dockerignore                    Excludes node_modules + dist from build context
+│   ├── .env.production                  VITE_API_URL=http://localhost:8000, VITE_WS_URL=ws://localhost:8000 (baked at build time)
+│   └── public/
+│       ├── favicon.ico + icon-*.png     Full favicon set (16, 32, 96, 180, 192, 512)
+│       ├── logo-full.png                Icon + wordmark (used in Landing/Login headers)
+│       ├── logo-icon-96.png             Icon only 96px (used in Dashboard Header + Sidebar)
+│       └── manifest.json               PWA manifest; theme_color=#FFD100; background_color=#0A0A0A
 ├── Dockerfile                           Backend ASGI image
 ├── Dockerfile.streamlit                 Dashboard image
-├── docker-compose.yml                   Backend + dashboard services (frontend volume mounted)
+├── .dockerignore                        Excludes frontend/node_modules, .venv, __pycache__, .git from backend context
+├── docker-compose.yml                   All 3 services: backend (:8000) + dashboard (:8501) + frontend (:5173)
 ├── pyproject.toml                       pytest + coverage config
 ├── engine_calibration.pkl               Stability limits + calibrated threshold (in backend root)
 └── .env.example                         Copy to backend/diesel_engine_predictor/.env
@@ -101,6 +111,19 @@ DieselEngineLeakDetection/
 ---
 
 ## Running the Project
+
+### Docker (primary — all 3 services in one command)
+
+```bash
+docker compose up --build
+# backend  → http://localhost:8000
+# dashboard → http://localhost:8501
+# frontend  → http://localhost:5173
+```
+
+`frontend/Dockerfile` is a two-stage build: `node:20-alpine AS build` runs `npm ci && npm run build` with `frontend/.env.production` (which bakes `VITE_API_URL` and `VITE_WS_URL` at build time); the second stage runs `serve -s dist -l 5173`.
+
+### Local development (alternative)
 
 ```bash
 # Create venv with system-site-packages (required — TensorFlow is global)
@@ -114,13 +137,15 @@ cp .env.example backend/diesel_engine_predictor/.env
 
 cd backend/diesel_engine_predictor
 python manage.py migrate
-python manage.py runserver   # development
 
 # ASGI (WebSocket support)
-daphne -p 8001 diesel_engine_predictor.asgi:application
+daphne -p 8000 diesel_engine_predictor.asgi:application
 
 # Streamlit dashboard (standalone — does NOT require Django to be running)
 streamlit run engine_simulator/app.py
+
+# React frontend — Vite dev server with proxy (relative-path fetches, no CORS needed)
+cd frontend && npm install && npm run dev   # → http://localhost:5173
 ```
 
 ---

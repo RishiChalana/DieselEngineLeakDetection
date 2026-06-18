@@ -1,4 +1,4 @@
-# Diesel Engine Air Leak Detection & Isolation
+# LeakGuard Industrial — Diesel Engine Air Leak Detection & Isolation
 
 > Real-time detection and zone-level isolation of air and exhaust leaks in CAT diesel
 > engines during test cell development runs — using only the 12 sensor channels already
@@ -57,7 +57,7 @@ flowchart LR
 
 ## Performance
 
-Evaluated on 2,000 synthetic held-out samples (500/class) at leak severity 0.40.
+Evaluated on 2,000 synthetic held-out samples (500/class, 5 seeds per class) at leak severity 0.40.
 Window-level detection: ≥4/7 samples predicted anomalous → LEAK.
 
 ### Binary Detection
@@ -73,19 +73,19 @@ Window-level detection: ≥4/7 samples predicted anomalous → LEAK.
 
 | Zone | F1 | Notes |
 |------|----|-------|
-| Zone 1 — Pre-compressor | 1.00 | Turbo-above-expected physics heuristic; 65% reliable at severity 0.20 |
+| Zone 1 — Pre-compressor | 0.80 | Turbo-above-expected physics heuristic; seed-dependent (65–100%) |
 | Zone 2 — Charge-air | 1.00 | Boost-below-expected discriminator gives clean isolation |
-| Zone 3 — Exhaust path | 1.00 | Exhaust z-scores dominate; reliable isolation |
+| Zone 3 — Exhaust path | 0.86 | Exhaust z-scores dominate; reliable isolation |
 | Zone 4 — Test-cell ducting | N/A | Not simulated; requires real test-cell data |
 
-**Macro F1 (zones 1–3): 1.000**
+**Macro F1 (zones 1–3): 0.884**
 
 ### Inference Latency
 
 | Metric | Value |
 |--------|-------|
-| Mean per 7-sample window | 674 ms |
-| p95 per 7-sample window | 755 ms |
+| Mean per 7-sample window | 692 ms |
+| p95 per 7-sample window | 807 ms |
 
 > Scores reflect the synthetic simulator distribution used for training.
 > Real test-cell validation is required before production deployment.
@@ -113,21 +113,33 @@ Window-level detection: ≥4/7 samples predicted anomalous → LEAK.
 
 ## Quickstart
 
-### With Docker (recommended)
+### With Docker (recommended — starts all three services)
 
 ```bash
 git clone <repo-url>
 cd DieselEngineLeakDetection
-docker compose up
-# Backend API:  http://localhost:8000
-# Dashboard:    http://localhost:8501
-
-# React frontend (Vite dev server — run separately):
-cd frontend && npm install && npm run dev
-# Frontend:     http://localhost:5173
+docker compose up --build
 ```
 
-### Local development
+| Service | URL | Description |
+|---------|-----|-------------|
+| Backend (Django/Daphne) | http://localhost:8000 | REST API + WebSocket |
+| Dashboard (Streamlit) | http://localhost:8501 | ML monitoring dashboard |
+| Frontend (React) | http://localhost:5173 | Live monitoring UI |
+
+### What you'll see
+
+1. **Landing page** (`/`) — Product overview, feature cards, detection pipeline diagram, CTA to login
+2. **Login page** (`/login`) — Operator authorization form with tab switch to register. Create an account then log in.
+3. **Dashboard** (`/dashboard`) — Three-column layout:
+   - **Left sidebar** — Engine model input, leak injection toggle (Charge / Exhaust / Pre-comp), START/STOP, EMERGENCY STOP
+   - **Center** — Rolling z_cumulative anomaly chart, 6-sensor telemetry grid, event log with TSV export
+   - **Right** — Zone confidence bars (gold highlight on detected zone), session info, zone key
+4. Click **START** to begin a session. The status panel shows IDLE → buffering → PASS.
+5. Toggle **Inject Leak Sim** and select a leak type. Within 2–3 windows (14–21 samples) the flag escalates to FAIL and the detected zone appears with a recommended inspection action.
+6. The **Batch Analysis** button (sidebar) opens a drag-and-drop CSV upload → Go/No-Go report.
+
+### Local development (alternative)
 
 ```bash
 # TensorFlow is system-installed; venv must inherit it
@@ -144,24 +156,10 @@ daphne -p 8000 diesel_engine_predictor.asgi:application
 
 # In another terminal (from project root):
 streamlit run engine_simulator/app.py
+
+# React frontend — Vite dev server with proxy:
+cd frontend && npm install && npm run dev   # http://localhost:5173
 ```
-
-### Frontend (React + Vite)
-
-```bash
-cd frontend
-npm install
-npm run dev   # http://localhost:5173
-```
-
-Vite proxies `/api` and `/user_auth` to `http://localhost:8000` (CORS-free).
-WebSocket connects directly to `ws://localhost:8000/ws/engine/?token=<tok>`.
-
-| Route | Page |
-|-------|------|
-| `/` | Landing — product overview, feature cards |
-| `/login` | Login / Register — DRF token auth |
-| `/dashboard` | Live monitoring dashboard (auth-guarded) |
 
 ---
 
@@ -213,23 +211,25 @@ DieselEngineLeakDetection/
 ├── engine_simulator/app.py            Streamlit 4-tab monitoring dashboard
 ├── config/constants.py                All hardcoded values (thresholds, weights)
 ├── scripts/
-│   ├── validate_zone_isolation.py     Zone discrimination table (Part A diagnostic)
+│   ├── validate_zone_isolation.py     Zone discrimination table diagnostic
 │   └── generate_performance_report.py Held-out eval → docs/MODEL_PERFORMANCE.md
 ├── frontend/                          Vite + React 18 frontend
-│   ├── src/
-│   │   ├── pages/                     Landing.jsx · Login.jsx · Dashboard.jsx
-│   │   ├── components/layout/         Header · Sidebar · Footer
-│   │   ├── components/dashboard/      StatusPanel · AnomalyChart · ZoneConfidenceBars · SensorGrid · EventLog · BatchModal
-│   │   ├── hooks/                     useAuth · useEngineWebSocket
-│   │   ├── api/                       client · auth · session · websocket
-│   │   └── lib/                       constants · sensorGenerator
-│   ├── vite.config.js                 Vite proxy: /api + /user_auth → :8000; /ws → ws://localhost:8000
-│   └── tailwind.config.js             Industrial Command design tokens (exact Stitch values)
+│   ├── public/                        favicon.ico, icon-*.png, logo-*.png, manifest.json
+│   ├── Dockerfile                     Multi-stage build: npm ci → vite build → serve
+│   ├── .env.production                VITE_API_URL + VITE_WS_URL for Docker builds
+│   └── src/
+│       ├── pages/                     Landing.jsx · Login.jsx · Dashboard.jsx
+│       ├── components/layout/         Header · Sidebar · Footer
+│       ├── components/dashboard/      StatusPanel · AnomalyChart · ZoneConfidenceBars · SensorGrid · EventLog · BatchModal
+│       ├── hooks/                     useAuth · useEngineWebSocket
+│       ├── api/                       client · auth · session · websocket
+│       └── lib/                       constants · sensorGenerator
 ├── tests/                             pytest suite (ML pipeline + API integration)
 ├── docs/                              Architecture, ML decisions, API reference
 ├── Dockerfile                         Backend ASGI image
 ├── Dockerfile.streamlit               Dashboard image
-└── docker-compose.yml                 Backend + dashboard services
+├── .dockerignore                      Excludes frontend/node_modules, .venv, __pycache__
+└── docker-compose.yml                 backend + dashboard + frontend (all three services)
 ```
 
 ---

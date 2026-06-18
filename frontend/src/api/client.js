@@ -1,3 +1,5 @@
+const BASE = import.meta.env.VITE_API_URL ?? ''
+
 export async function apiFetch(path, options = {}) {
   const token = sessionStorage.getItem('cat_token')
   const headers = {
@@ -5,7 +7,7 @@ export async function apiFetch(path, options = {}) {
     ...(token ? { Authorization: `Token ${token}` } : {}),
     ...options.headers,
   }
-  const res = await fetch(path, { ...options, headers })
+  const res = await fetch(`${BASE}${path}`, { ...options, headers })
   if (res.status === 401) {
     sessionStorage.clear()
     window.location.href = '/login'
