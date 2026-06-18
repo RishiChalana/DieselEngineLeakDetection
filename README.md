@@ -8,11 +8,18 @@
 
 ## Live Demo
 
-| Service | URL | Notes |
-|---------|-----|-------|
-| Frontend (React) | https://leakguard.vercel.app | Live monitoring UI |
-| Backend API (Render) | https://leakguard-backend.onrender.com | REST + WebSocket |
-| Dashboard (Streamlit) | https://leakguard-dashboard.streamlit.app | ML monitoring dashboard |
+| Service | URL |
+|---|---|
+| Frontend | https://diesel-engine-leak-detection.vercel.app |
+| Backend API | https://leakguard-backend-3qj5.onrender.com |
+| Streamlit Dashboard | https://dieselengineleakdetection-4tb2kahrv7kyggpbc6ctlc.streamlit.app |
+
+**Demo login:** username `demo` / password `demo12345`
+
+> The backend runs on Render's free tier. If it's been idle for 15+ minutes, 
+> the first request takes 30-90 seconds to wake up — this is expected, not 
+> a bug. The demo account is automatically re-seeded on every container 
+> restart, so login always works regardless of uptime gaps.
 
 **Demo credentials:** username `demo` / password `demo12345`
 
