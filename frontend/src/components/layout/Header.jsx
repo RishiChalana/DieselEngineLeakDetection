@@ -41,6 +41,7 @@ export default function Header({ flag, engineId, wsState, onLogout }) {
       {/* Left: brand */}
       <div className="flex items-center gap-8">
         <div className="flex items-center gap-3">
+          <img src="/logo-icon-96.png" alt="" className="h-8 w-8" aria-hidden="true" />
           <span className="font-display-lg text-primary-container font-black text-[20px] uppercase tracking-wider">CAT</span>
           <div className="h-8 w-px bg-white/10" />
         </div>

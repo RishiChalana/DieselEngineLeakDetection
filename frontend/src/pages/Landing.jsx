@@ -41,9 +41,7 @@ export default function Landing() {
         style={{ backgroundColor: 'rgba(10,10,10,0.8)', backdropFilter: 'blur(12px)', transition: 'background-color 0.3s' }}
         className="fixed top-0 w-full z-50 border-b border-outline-variant flex justify-between items-center px-margin-desktop py-4"
       >
-        <div className="font-headline-md text-[24px] font-black text-primary-container tracking-tighter uppercase">
-          LeakGuard Industrial
-        </div>
+        <img src="/logo-full.png" alt="LeakGuard Industrial" className="h-10" />
         <div className="hidden md:flex items-center space-x-8">
           <a className="font-label-caps text-label-caps text-primary-container font-bold border-b-2 border-primary-container pb-1 uppercase" href="#platform">Platform</a>
           <a className="font-label-caps text-label-caps text-on-surface-variant hover:text-on-surface transition-colors uppercase" href="#features">Features</a>
@@ -234,7 +232,7 @@ export default function Landing() {
           </div>
           <div className="mt-8 flex justify-center gap-12 font-label-caps text-label-caps text-on-surface-variant">
             <span className="flex items-center gap-2">
-              <span className="material-symbols-outlined text-primary-container">verified</span> F1 = 1.000 SYNTHETIC EVAL
+              <span className="material-symbols-outlined text-primary-container">verified</span> BINARY F1=1.000 · ZONE MACRO F1=0.884
             </span>
             <span className="flex items-center gap-2">
               <span className="material-symbols-outlined text-primary-container">lock</span> ON-PREMISE ONLY

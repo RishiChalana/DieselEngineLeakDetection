@@ -37,6 +37,7 @@ export default function Sidebar({
     <aside className="flex flex-col h-full py-panel-gap bg-surface border-r border-outline w-64 shrink-0">
       {/* Header */}
       <div className="px-6 py-4 mb-4">
+        <img src="/logo-icon-96.png" alt="" className="h-8 w-8 mb-3" aria-hidden="true" />
         <div className="font-label-caps text-label-caps uppercase text-primary-container mb-1">CONTROL PANEL</div>
         <div className="flex items-center gap-2">
           <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-industrial-green' : 'bg-on-surface-variant/40'} ${isConnected ? '' : 'animate-pulse'}`} />

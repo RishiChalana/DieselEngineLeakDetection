@@ -632,3 +632,64 @@ Result: every leak landed on zone_2 (charge_air) regardless of what was selected
 ### Build
 
 `npm run build`: 53 modules, 0 errors.
+
+---
+
+## Branding + Full Containerization (2026-06-18)
+
+**Status:** Complete
+
+### What was built
+
+**Part A — LeakGuard Industrial branding across all pages**
+
+- `frontend/index.html` — Updated title to "LeakGuard Industrial | CAT Engine Leak Detection"; added full favicon link set (favicon.ico, icon-16/32/180/192/512.png), manifest link, and `<meta name="theme-color" content="#FFD100">`.
+- `frontend/public/manifest.json` — Created PWA manifest: `name="LeakGuard Industrial"`, `short_name="LeakGuard"`, `theme_color="#FFD100"`, `background_color="#0A0A0A"`, `display="standalone"`, icon entries for 192px and 512px.
+- `frontend/src/pages/Landing.jsx` — Replaced text logo div in navbar with `<img src="/logo-full.png" alt="LeakGuard Industrial" className="h-10" />`. Also corrected F1 claim from "F1 = 1.000 SYNTHETIC EVAL" to "BINARY F1=1.000 · ZONE MACRO F1=0.884".
+- `frontend/src/pages/Login.jsx` — Replaced `shield_with_heart` Material Symbol + text in the top header bar with `<img src="/logo-full.png" className="h-8" />`; replaced `precision_manufacturing` icon + "Diesel Engine Leak Detection" text in the form panel with `<img src="/logo-full.png" className="h-12 mx-auto" />`.
+- `frontend/src/components/layout/Header.jsx` — Added `<img src="/logo-icon-96.png" className="h-8 w-8" aria-hidden="true" />` before the "CAT" brand text.
+- `frontend/src/components/layout/Sidebar.jsx` — Added `<img src="/logo-icon-96.png" className="h-8 w-8 mb-3" aria-hidden="true" />` above the CONTROL PANEL heading.
+
+Logo assets were already present in `frontend/public/`: `logo-full.png` (icon + wordmark), `logo-icon-96.png` (icon-only 96px), plus the full favicon set.
+
+**Part B — React frontend containerization**
+
+- `frontend/Dockerfile` — Multi-stage build. Stage 1: `node:20-alpine AS build`, `npm ci`, `npm run build` (picks up `.env.production`). Stage 2: `node:20-alpine`, `npm install -g serve`, `serve -s dist -l 5173`.
+- `frontend/.dockerignore` — Excludes `node_modules`, `dist`, `.env.local`, `.env.development` from the build context.
+- `frontend/.env.production` — `VITE_API_URL=http://localhost:8000`, `VITE_WS_URL=ws://localhost:8000`. Vite bakes these at build time; the production bundle has absolute URLs.
+- `docker-compose.yml` — Added `frontend` service (build context `./frontend`, Dockerfile `Dockerfile`, port `5173:5173`, `depends_on: backend`). Removed the `./frontend:/app/frontend` volume mount from the backend service (that mount was for the old single-file HTML; with a containerised React build it causes I/O errors on `node_modules`).
+- `.dockerignore` (project root) — Created to prevent backend's `COPY . .` from ingesting `frontend/node_modules` (~600MB). Excludes: `frontend/node_modules`, `frontend/dist`, `.venv`, `__pycache__`, `**/__pycache__`, `*.pyc`, `.pytest_cache`, `**/.pytest_cache`, `.git`, `*.md`, `docs/`, `tests/`, `scripts/`, `stitch_designs/`.
+
+**Part C — API layer env-var wiring**
+
+- `frontend/src/api/client.js` — Added `const BASE = import.meta.env.VITE_API_URL ?? ''`; all `fetch` calls now use `` `${BASE}${path}` ``. In dev (Vite proxy), `BASE` is empty so relative paths work. In Docker production, `BASE='http://localhost:8000'`.
+- `frontend/src/api/session.js` — Same pattern: `const BASE = import.meta.env.VITE_API_URL ?? ''`.
+- `frontend/src/api/websocket.js` — `const WS_BASE = import.meta.env.VITE_WS_URL ?? 'ws://localhost:8000'`; WebSocket URL is `${WS_BASE}/ws/engine/?token=`.
+- `frontend/src/api/auth.js` — unchanged; uses relative paths routed through Vite proxy in dev, which works because `auth.js` is called from the browser not the container.
+
+**Part D — Documentation updates**
+
+- `README.md` — Full rewrite: Docker quickstart is now the primary path (`docker compose up --build` → all 3 services); "What you'll see" walkthrough added (Landing → Login → Dashboard → leak injection flow); zone F1 table updated (zone_1=0.80, zone_3=0.86, macro=0.884); local dev moved to "alternative" section; project structure updated with `frontend/Dockerfile`, `.dockerignore`.
+- `CLAUDE.md` — File Layout updated with `frontend/Dockerfile`, `.env.production`, `.dockerignore`, `public/manifest.json`; `docker-compose.yml` description updated to "All 3 services"; Running the Project section updated (Docker as primary, local dev as alternative).
+- `docs/PHASE_LOG.md` — This entry.
+
+### Key technical decisions
+
+- **`VITE_*` vars baked at build time**: Vite env vars are replaced with literal strings during `npm run build`, not injected at runtime. `.env.production` is automatically loaded by Vite for production builds. This means the Docker image has `http://localhost:8000` hardcoded in the JS bundle — correct for a localhost demo, but would need image rebuilds for different deploy targets.
+- **Root `.dockerignore` required**: Without it, the backend's `COPY . .` in `Dockerfile` tried to copy all of `frontend/node_modules/` (~600MB) into the image, causing Docker's layer extraction to run out of memory or I/O capacity. The `.dockerignore` drops the context from ~700MB to ~5MB for the backend image.
+- **WebSocket not proxied in production**: The Vite dev proxy handles `/ws` → `ws://localhost:8000` in development, but in production (served by `serve`, no proxy), the browser connects directly. `VITE_WS_URL` provides the target. `TokenAuthMiddleware` on the Django side handles auth via `?token=` query param regardless.
+- **`serve -s` flag**: Required for React Router to work — single-page app mode. Without `-s`, direct navigation to `/dashboard` returns a 404 from the static file server.
+
+### Verification
+
+```
+npm run build (local):         ✓ 53 modules, 0 errors
+frontend/Dockerfile (build):   React build succeeds; dist/ produced; serve starts on :5173
+Docker Desktop I/O issue:      meta.db write error — Docker Desktop storage corruption,
+                               not a code issue; fix: restart Docker Desktop
+```
+
+### Notes
+
+- The Docker Desktop I/O error (`write .../meta.db: input/output error`) is a macOS Docker Desktop filesystem issue — meta.db is Docker's internal metadata store. `docker system prune -f` also failed with the same error. The fix is to restart Docker Desktop from the desktop application. The code itself is correct.
+- `CORS_ALLOW_ALL_ORIGINS = True` remains in `settings.py`. Required for the Streamlit dashboard (which calls the API directly from the Python process) and for any browser session hitting the API from a non-proxied origin.
