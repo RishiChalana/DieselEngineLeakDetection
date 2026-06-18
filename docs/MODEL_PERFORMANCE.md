@@ -1,6 +1,6 @@
 # Model Performance Report
 
-_Generated: 2026-06-16 12:16 | Eval set: 2000 samples (500/class) | 284 windows_
+_Generated: 2026-06-18 08:16 | Eval set: 2000 samples (500/class) | 284 windows_
 
 Evaluation is **window-level**: ≥4/7 samples predicted
 `is_leak=True` within a 7-sample window → window classified as LEAK.
@@ -38,8 +38,8 @@ _Evaluated on windows where both ground truth and prediction are LEAK._
 
 | Metric | Value |
 |--------|-------|
-| Mean per window (7 samples) | 674.2 ms |
-| p95 per window | 755.0 ms |
+| Mean per window (7 samples) | 702.2 ms |
+| p95 per window | 794.0 ms |
 
 ---
 

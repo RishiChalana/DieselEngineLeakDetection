@@ -290,7 +290,7 @@ BOOST_BELOW_EXPECTED_FACTOR: float = 0.60
 #: actual_turbo / expected_turbo(fuelrate) above this → turbo is elevated → zone_1 pattern.
 #: For precompressor: turbo *= (1+0.2s) → ratio > 1.
 #: For exhaust: turbo *= (1-0.6s) and is often clipped → ratio < 1.
-TURBO_ABOVE_EXPECTED_FACTOR: float = 1.60
+TURBO_ABOVE_EXPECTED_FACTOR: float = 1.04
 
 #: Minimum normalised zone score to consider a zone active.
 ZONE_FLOOR: float = 0.05
