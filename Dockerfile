@@ -20,4 +20,5 @@ EXPOSE 8000
 CMD ["sh", "-c", \
      "cd backend/diesel_engine_predictor && \
       python manage.py migrate --noinput && \
-      daphne -b 0.0.0.0 -p 8000 diesel_engine_predictor.asgi:application"]
+      python manage.py seed_demo_user && \
+      daphne -b 0.0.0.0 -p ${PORT:-8000} diesel_engine_predictor.asgi:application"]

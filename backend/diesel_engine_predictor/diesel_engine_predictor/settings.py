@@ -25,9 +25,11 @@ load_dotenv(BASE_DIR / ".env")
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.getenv("SECRET_KEY") or "django-insecure-dev-change-in-production"
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+# In production (Render), SECRET_KEY must be set as an environment variable.
+# For local development, set it in backend/diesel_engine_predictor/.env
+SECRET_KEY = os.getenv("SECRET_KEY") or "django-insecure-local-dev-only-change-in-production"
+
+DEBUG = os.getenv("DEBUG", "False") == "True"
 
 ALLOWED_HOSTS = [
     host.strip()
@@ -35,6 +37,7 @@ ALLOWED_HOSTS = [
         "ALLOWED_HOSTS",
         "localhost,127.0.0.1,0.0.0.0,backend"
     ).split(",")
+    if host.strip()
 ]
 
 # Application definition
@@ -66,8 +69,11 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
-# Allow all origins for development (supports file:// and cross-origin frontends)
-CORS_ALLOW_ALL_ORIGINS = True
+# Production: set CORS_ALLOWED_ORIGINS env var to comma-separated allowed origins.
+# Local dev / Docker Compose: CORS_ALLOW_ALL_ORIGINS=True is the safe default.
+_cors_origins_env = os.getenv("CORS_ALLOWED_ORIGINS", "")
+CORS_ALLOWED_ORIGINS = [o.strip() for o in _cors_origins_env.split(",") if o.strip()]
+CORS_ALLOW_ALL_ORIGINS = os.getenv("CORS_ALLOW_ALL_ORIGINS", "True") == "True"
 
 ROOT_URLCONF = 'diesel_engine_predictor.urls'
 

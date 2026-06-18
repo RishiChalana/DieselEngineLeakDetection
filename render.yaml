@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: leakguard-backend
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    healthCheckPath: /user_auth/health/
+    envVars:
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DEBUG
+        value: "False"
+      - key: ALLOWED_HOSTS
+        value: "leakguard-backend.onrender.com"
+      - key: CORS_ALLOW_ALL_ORIGINS
+        value: "False"
+      - key: CORS_ALLOWED_ORIGINS
+        sync: false   # set manually after Vercel frontend URL is known
+      - key: DATABASE_URL
+        value: "sqlite:////app/backend/diesel_engine_predictor/db.sqlite3"
+      - key: PYTHONPATH
+        value: "/app"
