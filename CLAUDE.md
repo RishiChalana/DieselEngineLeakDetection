@@ -64,7 +64,7 @@ DieselEngineLeakDetection/
 │       ├── index.css                    Animations (scanline, fail-pulse, blink, pulse-red-soft, draw) + panel primitives
 │       ├── lib/
 │       │   ├── constants.js             ANOMALY_THRESHOLD=6.3156, SENSOR_COLS, ZONE_LABELS, RECOMMENDED_ACTIONS
-│       │   └── sensorGenerator.js       Box-Muller noise; BASELINES from _VALID_PAYLOAD; 3 leak modes at severity 0.40
+│       │   └── sensorGenerator.js       Box-Muller noise; BASELINES from Python simulator (turbo=63k, fuel=88, MAF=946); 3 leak modes at severity 0.40
 │       ├── api/
 │       │   ├── client.js                apiFetch: Token header from sessionStorage; 401 → redirect /login
 │       │   ├── auth.js                  login, signup, logout (relative paths, proxy-routed)
@@ -147,6 +147,15 @@ The original Signup view called `make_password(data['password'])` before passing
 
 ### 7. Singleton ModelStack — class-level guard
 `ModelStack` uses `__new__` with a class-level `_singleton` attribute. This is intentional: loading 4 Keras models + SVM + Mahalanobis on every request would be ~2s latency. The singleton loads once at first call. If you see stale model weights in tests, add `ModelStack._singleton = None` in a fixture teardown.
+
+### 10. Zone classifier physics thresholds — recalibrated values
+`BOOST_BELOW_EXPECTED_FACTOR` (in `config/constants.py`) was originally 0.82; lowered to **0.60** after finding charge-air leak samples produced a boost ratio of ~0.556 at severity 0.40, which sat above 0.82 and caused Rule 2 (charge-air discriminator) to miss. At 0.60 it fires correctly.
+
+`TURBO_ABOVE_EXPECTED_FACTOR` is **1.04** (original calibrated value). A prior attempt to raise it to 1.60 to fix a JS frontend issue regressed precompressor zone_1 detection to 0% (Python simulator precompressor ratio = 1.077 < 1.60 → Rule 3 never fired). The correct fix was to align the JS frontend baselines with the Python simulator operating point instead of moving the threshold.
+
+`frontend/src/lib/sensorGenerator.js` BASELINES were originally taken from `_VALID_PAYLOAD` (turbo=90 000, fuel=75, MAF=520). These values are outside the ML training distribution — the healthy baseline produced `z_cumulative≈505` and `is_leak=True` on every sample. The baselines were updated to match the Python simulator steady-state: turbo=63 000, fuel_rate=88, MAF=946. Zone isolation now achieves macro F1=1.000 across all three zones (previously zone_1 F1=0.00).
+
+The two thresholds use `from config.constants import ...` bindings in `zone_classifier.py`. Patching `config.constants.*` in-process does NOT affect the already-bound module names — patch `ml_model.zone_classifier.BOOST_BELOW_EXPECTED_FACTOR` directly in tests or diagnostic scripts.
 
 ---
 
