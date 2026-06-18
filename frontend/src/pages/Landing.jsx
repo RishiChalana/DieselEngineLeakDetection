@@ -68,12 +68,7 @@ export default function Landing() {
           <div className="absolute inset-0 hero-gradient" />
         </div>
         <div className="relative z-10 px-margin-desktop max-w-5xl">
-          <div className="inline-block px-4 py-1 border border-primary-container/30 bg-primary-container/5 mb-6">
-            <span className="font-label-caps text-label-caps text-primary-container tracking-[0.2em] uppercase">
-              Caterpillar Hackathon · Real-time ML Detection
-            </span>
-          </div>
-          <h1 className="font-display-lg md:text-[72px] leading-tight font-black text-on-background mb-6 tracking-tighter uppercase" style={{ fontSize: '48px' }}>
+          <h1 className="font-display-lg md:text-[72px] leading-tight font-black text-on-background mb-6 tracking-tighter uppercase" style={{ fontSize: '55px' }}>
             Engine Leak<br />Detection &amp;<br /><span style={{ color: '#ffd100' }}>Isolation.</span>
           </h1>
           <p className="font-body-std text-[24px] text-on-surface-variant max-w-2xl mb-10 leading-relaxed">
