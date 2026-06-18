@@ -64,6 +64,7 @@ dist/
 .env
 .env.*
 !.env.example
+!frontend/.env.production
 
 ###################################
 # OS files

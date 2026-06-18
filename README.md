@@ -6,6 +6,20 @@
 
 ---
 
+## Live Demo
+
+| Service | URL | Notes |
+|---------|-----|-------|
+| Frontend (React) | https://leakguard.vercel.app | Live monitoring UI |
+| Backend API (Render) | https://leakguard-backend.onrender.com | REST + WebSocket |
+| Dashboard (Streamlit) | https://leakguard-dashboard.streamlit.app | ML monitoring dashboard |
+
+**Demo credentials:** username `demo` / password `demo12345`
+
+> **Note:** The Render free tier spins down after 15 minutes of inactivity. The first request takes 30–90 seconds to wake up — this is expected behaviour, not a bug. The demo account is automatically re-seeded on every container restart, so login always works regardless of uptime gaps.
+
+---
+
 ## Problem
 
 Diesel engines undergo extended dynamometer test runs before release. Air leaks in the

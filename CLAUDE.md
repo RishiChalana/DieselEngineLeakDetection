@@ -201,6 +201,7 @@ The two thresholds use `from config.constants import ...` bindings in `zone_clas
 | Frontend 1 | Complete | Self-contained HTML frontend (CORS + TokenAuthMiddleware) |
 | Frontend 2 | Complete | Stitch-pixel-faithful 3-file HTML UI (cat_product_landing_page, cat_login_premium, cat_monitoring_dashboard_premium) |
 | Frontend 3 | Complete | Vite + React 18 migration — full src/ tree, Tailwind CSS 3, React Router v6, 6 dashboard components, 3 pages |
+| Deploy | Complete | render.yaml (Render Blueprint), Vercel SPA config, Streamlit Cloud requirements, seed_demo_user command, production env vars |
 
 ---
 
@@ -268,6 +269,24 @@ Full protocol in `docs/API_REFERENCE.md`.
 
 ---
 
+## Deployment Architecture (Production)
+
+| Service | Platform | URL pattern | Notes |
+|---------|----------|-------------|-------|
+| Backend (Django/Daphne) | Render free web service (Docker) | `https://leakguard-backend.onrender.com` | `render.yaml` at project root; `PORT` env var injected by Render |
+| Frontend (React/Vite) | Vercel | `https://leakguard.vercel.app` | Static build; `frontend/vercel.json` handles SPA routing rewrites |
+| Dashboard (Streamlit) | Streamlit Community Cloud | `https://leakguard-dashboard.streamlit.app` | Entry point `engine_simulator/app.py`; deps in `engine_simulator/requirements.txt` |
+
+**Demo account:** `seed_demo_user` management command runs on every Render startup (idempotent). Credentials: `demo` / `demo12345`.
+
+**WebSocket in production:** uses `wss://` (TLS). `VITE_WS_URL=wss://leakguard-backend.onrender.com` is baked into the Vite build via `frontend/.env.production`.
+
+**CORS in production:** `CORS_ALLOW_ALL_ORIGINS=False`, `CORS_ALLOWED_ORIGINS` set manually in Render dashboard after Vercel URL is known.
+
+**Render free tier caveat (mention in every interview):** Render spins the service down after 15 minutes of inactivity. The first request to a cold instance takes 30–90 seconds. This is a free-tier limitation, not an architectural flaw — a paid instance or a keep-alive cron ping would eliminate it entirely.
+
+---
+
 ## Known Bugs / Open Issues
 
 1. **Zone 4 (test-cell ducting) has no synthetic validation path.** ZoneClassifier will classify to zone_4 only when no other zone dominates; we have no ground-truth test cases for this.
@@ -283,6 +302,8 @@ Full protocol in `docs/API_REFERENCE.md`.
 6. **InMemoryChannelLayer** still in use — not suitable for multi-worker WebSocket deployment.
 
 7. **Inference latency is ~96ms/sample (674ms per 7-sample window)** measured locally. In production with GPU or optimised TFLite export this would drop significantly.
+
+8. **Render free tier cold-start.** The backend spins down after 15 minutes of inactivity. First request after spin-down takes 30–90 seconds. This is a hosting constraint, not a system design issue — state this proactively in any demo or interview.
 
 ---
 
@@ -319,6 +340,8 @@ Added `corsheaders` to `INSTALLED_APPS` + `CorsMiddleware` at the top of `MIDDLE
 
 - Redis channel layer for production multi-worker WebSocket deployment.
 - Real test-cell data validation of zone classifier physics discriminators.
+- After Vercel deployment URL is known, set `CORS_ALLOWED_ORIGINS` in Render dashboard environment variables.
+- Consider a keep-alive cron ping to the Render health endpoint to avoid free-tier cold starts.
 
 ---
 
