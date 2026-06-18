@@ -40,27 +40,44 @@ _WARMUP_STEPS = 60
 _STABILISE_STEPS = 50
 _DOCS_PATH = _PROJECT_ROOT / "docs" / "MODEL_PERFORMANCE.md"
 
+# Number of independent simulator seeds used per class.  Using 5 seeds * 100 samples
+# each (rather than 1 seed * 500) prevents a single lucky seed from inflating zone F1.
+# Empirically, precompressor zone_1 accuracy is seed-dependent (0–100% per seed); a
+# multi-seed run gives a representative ~65% rate matching the diagnostic.
+_SEEDS_PER_CLASS = 5
+_N_PER_SEED = _N_PER_CLASS // _SEEDS_PER_CLASS  # 100
+
 
 # ---------------------------------------------------------------------------
 # Data generation
 # ---------------------------------------------------------------------------
 
 def _gen_healthy(seed: int) -> List[Dict[str, float]]:
-    sim = EngineSimulator(seed=seed)
-    for _ in range(_WARMUP_STEPS):
-        sim.step()
-    return [sim.step() for _ in range(_N_PER_CLASS)]
+    # Consecutive seeds (step=1) ensure we sample both stable and transient simulator
+    # states rather than accidentally landing on a run of identically-behaved seeds.
+    samples: List[Dict[str, float]] = []
+    for i in range(_SEEDS_PER_CLASS):
+        sim = EngineSimulator(seed=seed + i)
+        for _ in range(_WARMUP_STEPS):
+            sim.step()
+        samples.extend(sim.step() for _ in range(_N_PER_SEED))
+    return samples
 
 
 def _gen_leaky(leak_type: str, seed: int) -> List[Dict[str, float]]:
-    sim = EngineSimulator(seed=seed)
-    for _ in range(_WARMUP_STEPS):
-        sim.step()
-    sim.introduce_leak(leak_type=leak_type)
-    sim.leak_severity = _LEAK_SEVERITY
-    for _ in range(_STABILISE_STEPS):
-        sim.step()
-    return [sim.step() for _ in range(_N_PER_CLASS)]
+    # Consecutive seeds (step=1) ensure we sample both stable and transient simulator
+    # states rather than accidentally landing on a run of identically-behaved seeds.
+    samples: List[Dict[str, float]] = []
+    for i in range(_SEEDS_PER_CLASS):
+        sim = EngineSimulator(seed=seed + i)
+        for _ in range(_WARMUP_STEPS):
+            sim.step()
+        sim.introduce_leak(leak_type=leak_type)
+        sim.leak_severity = _LEAK_SEVERITY
+        for _ in range(_STABILISE_STEPS):
+            sim.step()
+        samples.extend(sim.step() for _ in range(_N_PER_SEED))
+    return samples
 
 
 # ---------------------------------------------------------------------------
@@ -126,12 +143,18 @@ def _zone_metrics(
     true_leak: List[bool],
     pred_leak: List[bool],
 ) -> Dict[str, Any]:
-    """Compute per-zone P/R/F1 on correctly detected leak windows."""
+    """Compute per-zone P/R/F1 over ALL ground-truth leak windows.
+
+    Undetected leak windows (is_pr=False) contribute a pred_zone of "none",
+    which counts as a false negative for every zone — preventing detection
+    failures from silently inflating zone recall.
+    """
     iso_gt, iso_pred = [], []
     for gt_z, pr_z, is_gt, is_pr in zip(gt_zones, pred_zones, true_leak, pred_leak):
-        if is_gt and is_pr:
+        if is_gt:
             iso_gt.append(gt_z)
-            iso_pred.append(pr_z)
+            # If the window was not detected as a leak, pred zone is effectively wrong.
+            iso_pred.append(pr_z if is_pr else "none")
 
     results: Dict[str, Any] = {}
     for zone in ("zone_1", "zone_2", "zone_3"):
@@ -200,7 +223,7 @@ Leak severity fixed at {_LEAK_SEVERITY} (bypasses the slow per-step escalation).
 
 ## Zone Isolation
 
-_Evaluated on windows where both ground truth and prediction are LEAK._
+_Evaluated on all ground-truth leak windows; undetected windows count as wrong zone (pred="none")._
 
 | Zone | Precision | Recall | F1 | Notes |
 |------|-----------|--------|----|-------|

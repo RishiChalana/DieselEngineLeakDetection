@@ -153,7 +153,11 @@ The original Signup view called `make_password(data['password'])` before passing
 
 `TURBO_ABOVE_EXPECTED_FACTOR` is **1.04** (original calibrated value). A prior attempt to raise it to 1.60 to fix a JS frontend issue regressed precompressor zone_1 detection to 0% (Python simulator precompressor ratio = 1.077 < 1.60 → Rule 3 never fired). The correct fix was to align the JS frontend baselines with the Python simulator operating point instead of moving the threshold.
 
-`frontend/src/lib/sensorGenerator.js` BASELINES were originally taken from `_VALID_PAYLOAD` (turbo=90 000, fuel=75, MAF=520). These values are outside the ML training distribution — the healthy baseline produced `z_cumulative≈505` and `is_leak=True` on every sample. The baselines were updated to match the Python simulator steady-state: turbo=63 000, fuel_rate=88, MAF=946. Zone isolation now achieves macro F1=1.000 across all three zones (previously zone_1 F1=0.00).
+`frontend/src/lib/sensorGenerator.js` BASELINES were originally taken from `_VALID_PAYLOAD` (turbo=90 000, fuel=75, MAF=520). These values are outside the ML training distribution — the healthy baseline produced `z_cumulative≈505` and `is_leak=True` on every sample. The baselines were updated to match the Python simulator steady-state: turbo=63 000, fuel_rate=88, MAF=946.
+
+Zone isolation performance (honest numbers, multi-seed eval): zone_1 F1=0.80, zone_2 F1=1.00, zone_3 F1=0.86, macro F1=0.884. Zone_1 is seed-dependent: some EngineSimulator seeds produce a fully-elevated turbo pattern (Rule 3 fires → zone_1 100%) while other seeds settle into a state where the ML vote goes directly to zone_3 (bypassing Rule 3). A single lucky seed (e.g. seed=11) yields F1=1.00 for zone_1 — a previous incorrect report. Using 5 consecutive seeds per class (100 samples each) gives the honest ~0.80.
+
+`generate_performance_report.py` was also fixed: `_zone_metrics` previously filtered `if is_gt and is_pr:`, excluding undetected leak windows from the zone denominator entirely. Now undetected windows count as wrong (pred="none"), so detection failures can't silently inflate zone recall.
 
 The two thresholds use `from config.constants import ...` bindings in `zone_classifier.py`. Patching `config.constants.*` in-process does NOT affect the already-bound module names — patch `ml_model.zone_classifier.BOOST_BELOW_EXPECTED_FACTOR` directly in tests or diagnostic scripts.
 
@@ -168,7 +172,7 @@ The two thresholds use `from config.constants import ...` bindings in `zone_clas
 | 2 | Complete | `/api/predict` view, `config/constants.py`, tests skeleton, full docs |
 | 3 | Complete | MAF AE fix, threshold unification, User.history, SteadyStateDetector, ZoneClassifier, predict() verdict |
 | 4 | Complete | Zone isolation diagnostic, physics override fixes (turbo/boost discriminators), consumer escalation cadence, session_analysis app (POST /api/session/), SessionReportGenerator, Streamlit 4-tab dashboard overhaul |
-| 5 | Complete | Real pytest test suite (41 pass, 0 fail), performance report script (F1=1.000 on held-out synthetic), Dockerfile + docker-compose, README rewrite |
+| 5 | Complete | Real pytest test suite (41 pass, 0 fail), performance report script (binary F1=1.000, zone macro F1=0.884 on held-out synthetic), Dockerfile + docker-compose, README rewrite |
 | Frontend 1 | Complete | Self-contained HTML frontend (CORS + TokenAuthMiddleware) |
 | Frontend 2 | Complete | Stitch-pixel-faithful 3-file HTML UI (cat_product_landing_page, cat_login_premium, cat_monitoring_dashboard_premium) |
 | Frontend 3 | Complete | Vite + React 18 migration — full src/ tree, Tailwind CSS 3, React Router v6, 6 dashboard components, 3 pages |
