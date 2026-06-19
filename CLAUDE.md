@@ -4,7 +4,7 @@ Read this first. It contains every non-obvious fact about this project that is n
 
 ---
 
-## Project Identity
+## Project Identity-
 
 Caterpillar hackathon project. Goal: real-time air and exhaust leak detection in diesel engine test cells using only the 12 sensor channels already present in a standard CAT test cell. No additional hardware. Detection must work during steady-state dynamometer runs.
 
